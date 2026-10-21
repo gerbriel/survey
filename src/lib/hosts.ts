@@ -31,7 +31,7 @@ export function classifyHost(
  * render a dashboard page there, because static routes beat `[key]`.
  * Aliases must never take one of these names (doc 02 section 2 reserved list).
  */
-export const DASHBOARD_SEGMENTS = ['w', 'admin', 'login', 'pending', 'invite', 'auth', 'dev'] as const
+export const DASHBOARD_SEGMENTS = ['w', 'admin', 'login', 'pending', 'invite', 'auth', 'dev', 'welcome', 'join'] as const
 
 /**
  * Internal path the public host's `/` is rewritten to. The dashboard owns the

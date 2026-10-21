@@ -2301,9 +2301,61 @@ export type Database = {
         }
         Returns: string
       }
+      admin_dismiss_access_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      admin_dismiss_workspace_request: {
+        Args: { p_request_id: string }
+        Returns: undefined
+      }
+      admin_issue_platform_invite: {
+        Args: { p_email?: string; p_expires_in_days?: number; p_note?: string }
+        Returns: {
+          created_at: string
+          email: string | null
+          expires_at: string
+          id: string
+          invited_by: string | null
+          note: string | null
+          revoked_at: string | null
+          token: string
+          used_at: string | null
+          used_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "platform_invites"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      admin_revoke_platform_invite: {
+        Args: { p_invite_id: string }
+        Returns: undefined
+      }
+      admin_set_abuse_report_status: {
+        Args: { p_report_id: string; p_status: string }
+        Returns: undefined
+      }
       admin_set_workspace_limits: {
         Args: { p_limits: Json; p_note: string; p_workspace_id: string }
         Returns: undefined
+      }
+      admin_update_privacy_notice: {
+        Args: { p_markdown: string }
+        Returns: undefined
+      }
+      admin_workspace_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          member_count: number
+          owner_id: string
+          response_count: number
+          storage_bytes_used: number
+          survey_count: number
+          workspace_id: string
+        }[]
       }
       answer_has_value: { Args: { p_row: Json }; Returns: boolean }
       answer_row: {
@@ -2430,6 +2482,10 @@ export type Database = {
         Args: { p_email: string; p_source: string; p_workspace_id: string }
         Returns: string
       }
+      finish_import: {
+        Args: { p_import_id: string; p_summary: Json }
+        Returns: undefined
+      }
       flag_on: { Args: { p_name: string }; Returns: boolean }
       follow_contact: { Args: { p_contact_id: string }; Returns: string }
       gen_survey_slug: { Args: Record<PropertyKey, never>; Returns: string }
@@ -2442,9 +2498,18 @@ export type Database = {
           version_no: number
         }[]
       }
+      hash_share_password: { Args: { p_password: string }; Returns: string }
       import_contacts_chunk: {
         Args: { p_import_id: string; p_rows: Json }
         Returns: Json
+      }
+      invite_preview: {
+        Args: { p_token: string }
+        Returns: {
+          logo_path: string
+          role: Database["public"]["Enums"]["workspace_role"]
+          workspace_name: string
+        }[]
       }
       is_active_profile: { Args: Record<PropertyKey, never>; Returns: boolean }
       is_member: {
@@ -2461,9 +2526,27 @@ export type Database = {
         Args: { p_doc: Json; p_keys: string[] }
         Returns: string
       }
+      log_export: {
+        Args: {
+          p_kind: string
+          p_row_count: number
+          p_scope: Json
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
       merge_contacts: {
         Args: { p_field_choices?: Json; p_merged: string[]; p_survivor: string }
         Returns: undefined
+      }
+      multi_choice_ids: { Args: { p_json: Json }; Returns: Json }
+      pending_storage_deletions: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          bucket: string
+          deletion_id: number
+          path: string
+        }[]
       }
       platform_storage_usage: {
         Args: Record<PropertyKey, never>
@@ -2502,6 +2585,13 @@ export type Database = {
       rename_workspace_slug: {
         Args: { p_slug: string; p_workspace_id: string }
         Returns: undefined
+      }
+      report_share_gate: {
+        Args: { p_password?: string; p_token: string }
+        Returns: {
+          report_id: string
+          status: string
+        }[]
       }
       report_widget_data: {
         Args: {
@@ -2544,6 +2634,7 @@ export type Database = {
           title: string
           version_id: string
           version_no: number
+          workspace_id: string
           workspace_name: string
         }[]
       }
@@ -2628,6 +2719,7 @@ export type Database = {
         Returns: Json
       }
       shares_workspace: { Args: { p_user: string }; Returns: boolean }
+      snapshot_labels: { Args: { p_items: Json }; Returns: Json }
       storage_object_name: {
         Args: { p_bucket: string; p_path: string }
         Returns: string
@@ -2704,6 +2796,19 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      workspace_members_with_email: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          avatar_url: string
+          display_name: string
+          email: string
+          invite_id: string
+          joined_at: string
+          role: Database["public"]["Enums"]["workspace_role"]
+          status: Database["public"]["Enums"]["profile_status"]
+          user_id: string
+        }[]
       }
       workspace_purge_due: { Args: { p_limit?: number }; Returns: string[] }
       workspace_slug_available: {

@@ -1182,6 +1182,27 @@ Service role only, called from Vercel Cron (section 13). `retention_batch` delet
 
 Also: `record_events`, `set_contact_custom`, `search_contacts` (security invoker), `contact_duplicate_candidates`, `import_contacts_chunk`, `filtered_responses`, `version_questions`, `shared_report_payload` (service role only), and `platform_storage_usage()` (PA, bytes per workspace from `storage.objects`). Minting a password reset link is a route handler using the Supabase admin API after an `is_platform_admin()` check, not a SQL function.
 
+Added by migration 0018 (Phase 2 follow-ups; the module that asked is in parentheses):
+
+```sql
+log_export(p_workspace_id uuid, p_kind text, p_scope jsonb, p_row_count int) returns void            -- 2D
+finish_import(p_import_id uuid, p_summary jsonb) returns void                                        -- 2D
+admin_workspace_stats() returns table (workspace_id, owner_id, member_count, survey_count, response_count, storage_bytes_used)  -- 2A
+invite_preview(p_token text) returns table (workspace_name, logo_path, role)                         -- 2A
+workspace_members_with_email(p_workspace_id uuid) returns table (user_id, role, display_name, avatar_url, status, email, invite_id, joined_at)  -- 2A
+pending_storage_deletions(p_workspace_id uuid) returns table (deletion_id, bucket, path)              -- 2A, service role
+admin_issue_platform_invite(p_email text default null, p_note text default null, p_expires_in_days int default 30) returns platform_invites  -- 2A
+admin_revoke_platform_invite(p_invite_id uuid) returns void                                          -- 2A
+admin_update_privacy_notice(p_markdown text) returns void                                            -- 2A
+admin_set_abuse_report_status(p_report_id uuid, p_status text) returns void                          -- 2A
+admin_dismiss_access_request(p_request_id uuid) returns void                                         -- 2A
+admin_dismiss_workspace_request(p_request_id uuid) returns void                                      -- 2A
+hash_share_password(p_password text) returns text                                                    -- 2E
+report_share_gate(p_token text, p_password text default null) returns table (status, report_id)      -- 2E, service role
+multi_choice_ids(p_json jsonb) returns jsonb                                                         -- 2C, helper
+```
+`log_export` needs editor for row level kinds (`responses`, `contacts`) and viewer for aggregate kinds (`summary`, `report`), matching doc 05. `finish_import` sets `status` (`done` or `failed`), `finished_at`, and any counts given. The `admin_*` functions check `is_platform_admin()` and write `platform_audit_log` themselves. `report_share_gate` returns `not_found`, `needs_password` or `open` (with the report id) and counts the view; `shared_report_payload` no longer counts views. Changed in place: `answer_row` (multiple_choice `{ids, other}`), `resolve_public_survey` (adds `workspace_id`), `filtered_responses` (contact custom field filters), `shared_report_payload` (matrix labels), `reserved_public_segments` (adds `welcome`).
+
 ## 13. Scheduled jobs (R3)
 
 Two runners with a clear line: pg_cron runs pure SQL that never touches Storage; Vercel Cron runs anything that must call the Storage API.
@@ -1232,7 +1253,21 @@ Only `responses` joins `supabase_realtime`. The inbox subscribes with `filter: s
 16. `0016_cron.sql`: the pg_cron schedules in section 13.
 17. `0017_realtime.sql`: add responses to `supabase_realtime`.
 
+18. `0018_phase2_followups.sql`: see "Migration 0018" below.
+
 A test after 0017 asserts `anon` holds no table privilege in `public` and exactly two function privileges.
+
+### Migration 0018
+
+Phase 2 follow-ups, requested in the build plan's running notes:
+
+- **multiple_choice Other text (2C).** `answer_row` accepts `[ids]` or `{ids, other}` and stores `value_json` as `[ids]` when Other is blank, else `{ids, other}`; single choice `{id, other}` stores `value_text` plus `value_json {other}`. Unknown option ids still raise `unknown_option`. Every reader of multiple_choice `value_json` (score sum and contact mapping in `submit_response_core`, `report_widget_data`, `filtered_responses`) goes through `multi_choice_ids`. Anonymize in `erase_respondent` strips Other text from kept choice answers.
+- **Public read (2C).** `resolve_public_survey` returns `workspace_id` as its last column (dropped and recreated; grants unchanged, anon still holds exactly two functions).
+- **Reports (2E).** `filtered_responses` adds `contact.custom: [{key, op: eq|contains, value}]`. `shared_report_payload` adds `rows` and `columns` ({id, label}) for matrix widgets and reduces `options` to {id, label}. `hash_share_password` stores bcrypt; `report_share_gate` is the service role gate for `/r/{token}`.
+- **Exports and imports (2D).** `log_export`, `finish_import`.
+- **Admin (2A).** `admin_workspace_stats`, `invite_preview`, `workspace_members_with_email`, `pending_storage_deletions`, and the self-auditing `admin_*` writes listed in section 12. `reserved_public_segments()` adds `welcome` (`join` was already there), matching `DASHBOARD_SEGMENTS`.
+
+Tested by `supabase/tests/09_phase2_followups.sql`.
 
 ## Decisions made here
 
