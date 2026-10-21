@@ -1,0 +1,3 @@
+-- seed.sql: loaded by `supabase db reset` after every migration.
+-- Phase 1A fills this in: platform admin profile, one demo workspace, system templates.
+-- Phase 0 ships it empty on purpose.
