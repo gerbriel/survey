@@ -41,11 +41,11 @@ Consequences you must keep:
 
 ### 3. Authorization lives in RLS and SQL functions
 
-Every tenant table has RLS backed by `is_member(workspace_id, min_role)`. Route guards (`requireMember` and friends, layout checks, hidden buttons) are UX only. They exist so the UI renders sensibly; the database is what refuses a request. `createAdminClient()` bypasses RLS: import it only from route handlers that already authenticated and authorized the caller, never from a client component, never under `(public)`.
+Every tenant table has RLS backed by `is_member(workspace_id, min_role)`. Route guards (`requireMember` and friends, layout checks, hidden buttons) are UX only. They exist so the UI renders sensibly; the database is what refuses a request. `createAdminClient()` bypasses RLS. It is created only inside server-only modules under `src/lib` (for example `src/lib/public/submit.ts`), and those modules are called from route handlers that have already verified the caller: Turnstile plus rate limits for public submissions, `requireMember` or `requirePlatformAdmin` for dashboard work. Nothing under `src/app` imports it; ESLint enforces that.
 
 ### 4. No em or en dashes
 
-Owner rule for every file: UI copy, docs, comments, commit messages. Rewrite with a period, comma, colon, or plain hyphen. `pnpm check:copy` greps `src/`, `docs/`, `README.md` and this file for U+2014 and U+2013 and fails on any hit.
+Owner rule for every file: UI copy, docs, comments, commit messages. Rewrite with a period, comma, colon, or plain hyphen. `pnpm check:copy` greps `src/`, `docs/`, `supabase/`, `README.md` and this file for U+2014 and U+2013 and fails on any hit.
 
 ## Gates
 
@@ -66,6 +66,52 @@ pnpm check:copy    # no em or en dashes
 ## Running locally
 
 See README "Run locally". Short version: copy `.env.example` to `.env.local`, `pnpm dev`, open `http://survey.localhost:3000` (dashboard) and `http://s.localhost:3000` (public). Plain `localhost:3000` is an unknown host and returns 404 by design.
+
+## Data access (Phase 1D)
+
+### Which client where
+
+All four live in `src/lib/supabase/`. Each returns a branded type (`UserClient`, `AnonClient`, `AdminClient` from `src/lib/supabase/types.ts`) so a wrapper can refuse the wrong one at compile time.
+
+| Client | File | Runs as | Use from | Never from |
+|---|---|---|---|---|
+| `createServerClient()` (async) | `server.ts` | signed-in member, RLS applies | dashboard server components, layouts, server actions, route handlers on `DASHBOARD_HOST` | `(public)`, client components |
+| `createBrowserClient()` | `browser.ts` | signed-in member, RLS applies | dashboard client components (realtime, uploads) | `(public)` |
+| `createAnonClient()` | `anon.ts` | anon, no cookie adapter, no session | `(public)` pages and `/api/public/*`, only for `resolve_public_survey` and `get_public_definition` | anything that needs a member |
+| `createAdminClient()` | `admin.ts` | service role, bypasses RLS | server-only library code under `src/lib` (for example `src/lib/public/*`, cron helpers) after Turnstile, `CRON_SECRET`, or an explicit auth check | anything under `src/app`, client components |
+| `updateSession(req, headers)` | `proxy.ts` | refreshes the member session | `src/proxy.ts`, dashboard branch only | everything else |
+
+Cookie rules (`cookies.ts`, unit tested): no `Domain` attribute ever (host-only to `DASHBOARD_HOST`), `Path=/`, `SameSite=Lax`, `Secure` everywhere except `next dev`. Every write goes through `hostOnlyCookieOptions`, which strips a `Domain` even if the library passes one.
+
+ESLint enforces the matrix: under `src/app/**` the admin client and the raw `@supabase/supabase-js` and `@supabase/ssr` imports are refused (type-only imports are allowed); under `src/app/(public)/**` the server, browser and proxy clients and `src/lib/auth` are refused too. This tightens rule 3 above: route handlers reach the service role through a server-only module in `src/lib`, not by importing `admin.ts` themselves.
+
+### Pages never query directly
+
+Pages, layouts, server actions and route handlers never call `.from()` or `.rpc()`. They call `src/lib/db/*`. Each wrapper takes the client as its first argument, validates input with zod, calls one SQL function (or one table query under RLS) with the exact SQL argument names, and returns `DbResult<T>`:
+
+```ts
+import { saveDraft } from '@/lib/db/surveys'
+const r = await saveDraft(supabase, { versionId, expectedRevision, definition })
+if (!r.ok) switch (r.error.code) { case 'revision_conflict': ...; case 'lock_lost': ... }
+```
+
+Wrappers never throw. `unwrap(result)` from `@/lib/db/errors` throws a `DbException` for code that prefers exceptions. A module that needs a new table query adds a wrapper in `src/lib/db` (Phase 2 agents may add files there for their own tables; keep one area per file).
+
+Files: `workspaces.ts`, `profiles.ts`, `invites.ts`, `surveys.ts`, `publish.ts`, `publicRead.ts` (anon client only), `submission.ts`, `events.ts` (service role), `contacts.ts`, `responses.ts`, `reports.ts`, `exports.ts` (storage cleanup jobs), `privacy.ts`, `admin.ts` (platform admin and purge), `limits.ts` (`GLOBAL_LIMIT_DEFAULTS`, pinned to SQL by a test), `errors.ts`, `rpc.ts`.
+
+### Error code contract
+
+SQL raises the code as the exception message, optionally `code: detail` (`revision_conflict`, `lock_lost`, `server_only_key_in_public_definition: score`). `toDbError` maps it to `DbError { code, detail?, message, category, sqlState? }`. `message` is plain copy safe to show a member. `category` groups codes as `auth`, `lock`, `survey`, `limit`, `input`, `conflict`, `system` (the build plan's prefixes; the SQL itself uses flat codes). Non-SQL failures map to `invalid_input` (zod), `guard_violation` (trigger sentence), `permission_denied` (42501, missing grant or RLS), `unique_violation`, `foreign_key_violation`, `check_violation`, `invalid_value`, `no_rows`, `session_expired`, `function_not_found`, `network`, `unknown`.
+
+`SQL_ERROR_CODES` in `errors.ts` lists every code the migrations raise; a unit test greps the migrations and fails when a new code is missing. `submit_response` and `create_upload` return `{ok:false, code}` as data for expected outcomes (`cap_reached`, `token_used`, `validation_failed`, `file_size`, ...), so those arrive as `r.data`, not `r.error`.
+
+### Auth helpers
+
+`src/lib/auth` (server only, dashboard group): `requireUser`, `requireMember(slug, minRole)`, `requirePlatformAdmin`, `getCurrentWorkspace`, `getAuthContext`, role ordering (`roleAtLeast`, `memberCan`, mirroring `is_member`), `getGoogleSignInUrl`, `setInviteCookie`, `claimInvitesFromCookies`, `handleAuthCallback`. The guards redirect for UX only; RLS is the authorization.
+
+### database.ts provenance
+
+`src/types/database.ts` was generated on 2026-10-21 from the throwaway Postgres 17 stand-in (all migrations plus seed), not from the Supabase stack: `supabase gen types` needs Docker for its postgres-meta image, so the same generator ran from the `@supabase/postgres-meta` npm package (`PG_META_GENERATE_TYPES=typescript`). Regenerate with `pnpm db:types` once Docker exists and diff it. Short aliases (`Tables<'surveys'>`, `Enums<'workspace_role'>`) live in `src/types/db-helpers.ts`. The integration tests in `src/lib/db/__tests__/integration/` skip unless `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are set; they have not run yet.
 
 ## Module ownership
 
@@ -131,4 +177,3 @@ Files Phase 0 created outside the table: `src/lib/hosts.ts` (host routing rules)
 - **Unknown hosts get a 404, including plain `localhost` and `*.vercel.app` previews.** Previews need the two hostnames mapped (doc 02 mentions a `DEV_HOST_MAP` for this; not built yet).
 - **`/api/cron/*` passes through the proxy with no CSP and no session.** The handler checks `CRON_SECRET`; there is no HTML to protect.
 - **`/dev/*` 404s outside `next dev`.** It is a fixture gallery, not a product page.
-- **The Supabase client files throw.** They are Phase 0 stubs so the lint rule has real targets. Phase 1D implements them.

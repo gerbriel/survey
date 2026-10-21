@@ -151,7 +151,7 @@ language sql stable security definer set search_path = public, pg_temp as $$
 $$;
 
 -- Global limits (docs/00 "Global limits"). A test keeps these constants equal
--- to src/lib/limits.ts. A null override column means "use the default".
+-- to src/lib/db/limits.ts (a unit test pins the two lists together). A null override column means "use the default".
 create or replace function effective_limits(p_workspace_id uuid)
 returns table (max_file_bytes bigint, max_files_per_response int, max_questions int,
                max_definition_bytes int, rate_limit_per_hour int, raw_script_pixels_allowed boolean)

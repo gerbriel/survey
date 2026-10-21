@@ -6,6 +6,7 @@ import {
   isPublicPathAllowed,
   publicRedirectTarget,
 } from '@/lib/hosts'
+import { updateSession } from '@/lib/supabase/proxy'
 
 /**
  * Hostname routing and Content Security Policy. Runs before every matched
@@ -157,10 +158,10 @@ export async function proxy(req: NextRequest) {
   if (path.startsWith('/api/cron/')) return NextResponse.next()
 
   const csp = dashboardCsp(nonce)
-  // TODO(Phase 1D): replace NextResponse.next with updateSession() from
-  // src/lib/supabase/proxy.ts so the Supabase session cookie refreshes here,
-  // on the dashboard host only. Cookies stay host-only (no Domain attribute).
-  return withCsp(NextResponse.next({ request: { headers: forwardHeaders(req, nonce, csp) } }), csp)
+  // Supabase session refresh, dashboard host only (Phase 1D). updateSession
+  // keeps the forwarded nonce and CSP request headers on its response and
+  // writes host-only cookies (no Domain attribute). It never redirects.
+  return withCsp(await updateSession(req, forwardHeaders(req, nonce, csp)), csp)
 }
 
 export const config = {
