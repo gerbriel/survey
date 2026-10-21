@@ -52,8 +52,8 @@ declare l record;
 begin
   select * into l from public.effective_limits(tests.id('acme'));
   assert l.max_file_bytes = 26214400 and l.max_files_per_response = 20 and l.max_questions = 300
-     and l.max_definition_bytes = 1048576 and l.rate_limit_per_hour = 20 and l.raw_script_pixels_allowed,
-    'global defaults';
+     and l.max_definition_bytes = 1048576 and l.rate_limit_per_hour = 20 and not l.raw_script_pixels_allowed,
+    'global defaults (0019 S3: script pixels off by default)';
 end $$;
 select tests.as_user('owner');
 do $$ begin

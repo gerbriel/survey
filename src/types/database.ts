@@ -846,6 +846,25 @@ export type Database = {
           },
         ]
       }
+      internal_secrets: {
+        Row: {
+          created_at: string
+          name: string
+          value: string
+        }
+        ComputedFields: never
+        Insert: {
+          created_at?: string
+          name: string
+          value: string
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          value?: string
+        }
+        Relationships: []
+      }
       platform_audit_log: {
         Row: {
           action: string
@@ -1344,6 +1363,7 @@ export type Database = {
           moved_at: string | null
           object_path: string
           original_name: string
+          pending_response_id: string | null
           question_key: string
           response_id: string | null
           size_bytes: number | null
@@ -1362,6 +1382,7 @@ export type Database = {
           moved_at?: string | null
           object_path: string
           original_name: string
+          pending_response_id?: string | null
           question_key: string
           response_id?: string | null
           size_bytes?: number | null
@@ -1379,6 +1400,7 @@ export type Database = {
           moved_at?: string | null
           object_path?: string
           original_name?: string
+          pending_response_id?: string | null
           question_key?: string
           response_id?: string | null
           size_bytes?: number | null
@@ -1387,6 +1409,12 @@ export type Database = {
           workspace_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "response_files_pending_response_id_fkey"
+            columns: ["pending_response_id"]
+            referencedRelation: "responses"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "response_files_response_id_fkey"
             columns: ["response_id"]
@@ -2422,6 +2450,7 @@ export type Database = {
           question_key: string
         }[]
       }
+      delete_response: { Args: { p_response_id: string }; Returns: undefined }
       delete_survey: { Args: { p_survey_id: string }; Returns: undefined }
       effective_limits: {
         Args: { p_workspace_id: string }
@@ -2446,6 +2475,7 @@ export type Database = {
           path: string
         }[]
       }
+      erasure_email_hash: { Args: { p_email: string }; Returns: string }
       export_respondent_data: { Args: { p_contact_id: string }; Returns: Json }
       filtered_responses: {
         Args: { p_filters?: Json; p_survey_id: string }
@@ -2520,6 +2550,7 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      is_secret_column: { Args: { p_name: string }; Returns: boolean }
       is_service_role: { Args: Record<PropertyKey, never>; Returns: boolean }
       is_trusted_caller: { Args: Record<PropertyKey, never>; Returns: boolean }
       jsonb_find_key: {
@@ -2719,6 +2750,7 @@ export type Database = {
         Returns: Json
       }
       shares_workspace: { Args: { p_user: string }; Returns: boolean }
+      signup_verified_email: { Args: { p_user_id: string }; Returns: string }
       snapshot_labels: { Args: { p_items: Json }; Returns: Json }
       storage_object_name: {
         Args: { p_bucket: string; p_path: string }

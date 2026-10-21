@@ -49,7 +49,7 @@ begin
   v_p := pg_temp.payload('complete', 'leads', v_full, v_vis);
   v_res := public.submit_response(v_p);
   assert (v_res ->> 'ok')::boolean, format('second complete: %s', v_res);
-  assert public.submit_response(v_p) = v_res, 'idempotent replay';
+  assert public.submit_response(v_p) = v_res || '{"replayed": true}'::jsonb, 'idempotent replay (0019 S4: marked replayed)';
   assert (select complete_count from public.surveys where id = tests.id('leads')) = 2, 'count 2 after replay';
 
   -- Contact resolved from the identity answer, mapping fills blanks

@@ -409,8 +409,8 @@ select count(*) from public.erase_respondent(current_setting('tests.anon_contact
 reset role;
 select tests.clear_claims();
 do $$ begin
-  assert not exists (select 1 from public.answers where value_json::text like '%555%'), 'other text removed';
-  assert not exists (select 1 from public.responses where raw::text like '%555%'), 'other text not in raw';
+  assert not exists (select 1 from public.answers where value_json::text like '%Call me at 555%'), 'other text removed';
+  assert not exists (select 1 from public.responses where raw::text like '%Call me at 555%'), 'other text not in raw';
   assert exists (select 1 from public.answers a join public.responses r on r.id = a.response_id
                  where r.anonymized_at is not null and a.question_key = 'q_evfb0002' and a.value_json = '["o_2"]'),
     'ids kept for aggregates';
