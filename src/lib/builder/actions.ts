@@ -11,11 +11,24 @@ import { getAuthContext } from '@/lib/auth/guards'
 import { getProfile } from '@/lib/db/profiles'
 import { getWorkspaceById } from '@/lib/db/workspaces'
 import { getEffectiveLimits } from '@/lib/db/limits'
-import { createSurvey, releaseDraftLock, saveDraft, setSurveyAlias, takeDraftLock } from '@/lib/db/surveys'
+import {
+  createSurvey,
+  releaseDraftLock,
+  saveDraft,
+  setSurveyAlias,
+  takeDraftLock,
+  getSurvey,
+  getVersion,
+  setSurveyArchived,
+  updateSurveySettings,
+  type SurveySettingsPatch,
+} from '@/lib/db/surveys'
 import type { DbError, DbResult } from '@/lib/db/errors'
 import type { UserClient } from '@/lib/supabase/types'
 import { publishDraft } from './publish'
-import { getSurvey, getVersion, insertTemplate, listContactFields, listPixels, setSurveyArchived, updateSurveySettings, type SurveySettingsPatch } from './queries'
+import { insertTemplate } from '@/lib/db/templates'
+import { listContactFields } from '@/lib/db/contacts'
+import { listPixelSummaries } from '@/lib/db/pixels'
 import type { ActionResult, DraftSnapshot, LockInfo, PublishOutcome } from './types'
 
 function failed<T>(e: { code: DbError['code'] | string; message: string }): ActionResult<T> {
@@ -147,7 +160,7 @@ export async function publishAction(input: {
   const [ws, fields, pixels, limits] = await Promise.all([
     getWorkspaceById(s.client, { workspaceId: wsId }),
     listContactFields(s.client, { workspaceId: wsId }),
-    listPixels(s.client, { workspaceId: wsId }),
+    listPixelSummaries(s.client, { workspaceId: wsId }),
     getEffectiveLimits(s.client, { workspaceId: wsId }),
   ])
   const excluded = new Set(survey.data.excluded_pixel_ids)

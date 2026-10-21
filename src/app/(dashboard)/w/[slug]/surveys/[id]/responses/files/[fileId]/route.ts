@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthContext } from '@/lib/auth'
-import { getResponseFile, signResponseFile } from '@/lib/crm/data/responses'
+import { getResponseFile, signResponseFile } from '@/lib/db/responses'
 
 /**
  * Authenticated file redirect (doc 04 section 6: signed URLs expire and leak,

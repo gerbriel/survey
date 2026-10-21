@@ -1,5 +1,7 @@
 import { loadSurveyContext } from '@/lib/builder/load'
-import { getVersion, listContactFields, listPixels } from '@/lib/builder/queries'
+import { getVersion } from '@/lib/db/surveys'
+import { listContactFields } from '@/lib/db/contacts'
+import { listPixelSummaries } from '@/lib/db/pixels'
 import { fillTheme, loadDefinition } from '@/lib/builder/defaults'
 import { previousDefinition } from '@/lib/builder/publish'
 import { publicAssetUrl } from '@/lib/builder/share'
@@ -17,7 +19,7 @@ export default async function EditPage({ params }: { params: Promise<{ slug: str
     getVersion(client, { versionId: survey.current_draft_version_id }),
     previousDefinition(client, survey.latest_published_version_id),
     listContactFields(client, { workspaceId: ws.id }),
-    listPixels(client, { workspaceId: ws.id }),
+    listPixelSummaries(client, { workspaceId: ws.id }),
   ])
   if (!draft.ok || !draft.data) return <EmptyState title="The draft could not be loaded" description={draft.ok ? undefined : draft.error.message} />
   const workspaceTheme = fillTheme(ws.default_theme)

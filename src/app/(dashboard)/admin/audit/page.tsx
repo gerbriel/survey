@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { listPlatformAudit, listProfiles } from '@/lib/admin/db/platform'
+import { listPlatformAudit, listProfiles } from '@/lib/db/admin'
 import { formatDateTime } from '@/lib/admin/lifecycle'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'

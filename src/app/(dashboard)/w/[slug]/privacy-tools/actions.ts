@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { requireMember } from '@/lib/auth'
 import { confirmMatches, eraseRespondentFully } from '@/lib/privacy/erase'
-import { findRespondents } from '@/lib/privacy/lookup'
+import { findRespondents } from '@/lib/db/privacy'
 
 export type EraseState = { status: 'idle' | 'done' | 'error'; message: string }
 
@@ -16,7 +16,7 @@ export async function eraseAction(slug: string, contactId: string, _prev: EraseS
   const m = await requireMember(slug, 'admin')
   const mode = formData.get('mode') === 'hard' ? 'hard' : formData.get('mode') === 'anonymize' ? 'anonymize' : null
   if (!mode) return { status: 'error', message: 'Pick hard delete or anonymize.' }
-  const found = await findRespondents(m.supabase, m.workspace.id, { kind: 'id', value: contactId })
+  const found = await findRespondents(m.supabase, { workspaceId: m.workspace.id, query: { kind: 'id', value: contactId } })
   const contact = found.ok ? found.data[0] : undefined
   if (!contact) return { status: 'error', message: 'We could not find that contact.' }
   if (!confirmMatches(String(formData.get('confirm') ?? ''), contact.email)) {

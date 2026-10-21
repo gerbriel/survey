@@ -1,4 +1,4 @@
-import type { InboxRow } from '@/lib/crm/data/responses'
+import type { InboxRow } from '@/lib/db/responses'
 
 /**
  * Realtime handling for the response inbox (doc 01 section 14). The

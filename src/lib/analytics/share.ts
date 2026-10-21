@@ -1,6 +1,6 @@
 import 'server-only'
 import { createHash } from 'node:crypto'
-import { sharedReportPayload } from '@/lib/db/reports'
+import { reportShareGate, sharedReportPayload, type ReportShareGateStatus } from '@/lib/db/reports'
 import { rateLimitHit } from '@/lib/db/submission'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { sanitizeSharedPayload, SHARE_TOKEN_RE, type SafeSharedPayload } from './share-payload'
@@ -9,10 +9,10 @@ import { sanitizeSharedPayload, SHARE_TOKEN_RE, type SafeSharedPayload } from '.
  * Server side of the public /r/[token] page (doc 04 section 5.4). The page
  * lives on PUBLIC_HOST and may not import the admin client, so it calls these.
  *
- * All validation (exists, not revoked, not expired, password) happens inside
- * shared_report_payload, which derives report, survey and workspace from the
- * share row. The single extra read here, shareNeedsPassword, only tells the
- * page whether to draw a password prompt instead of a 404.
+ * All validation (exists, not revoked, not expired, password) happens in SQL:
+ * report_share_gate decides between 404, password prompt and open, and
+ * counts the view; shared_report_payload derives report, survey and
+ * workspace from the share row and returns aggregates only.
  */
 export { shareCookieName, sealPassword, unsealPassword } from './share-payload'
 
@@ -27,27 +27,19 @@ export function shareCookieSecret(): string {
   return s
 }
 
-export type ShareGate = 'not_found' | 'needs_password' | 'open'
+export type ShareGate = ReportShareGateStatus
 
 /**
- * Whether a live share exists and has a password. Unknown, revoked and
- * expired all return not_found. Reads one row with the service role; the
- * hash itself never leaves this function.
- * TODO(foundation): a SECURITY DEFINER `report_share_gate(p_token)` would keep
- * this read in SQL; until then it is a single filtered select.
+ * report_share_gate (migration 0018), called on every page load: not_found
+ * for an unknown, revoked or expired token, needs_password when the share has
+ * a password and none or a wrong one was given, open otherwise. Every open
+ * counts one view.
  */
-export async function shareGate(token: string): Promise<ShareGate> {
+export async function shareGate(token: string, password: string | null): Promise<ShareGate> {
   if (!isShareToken(token)) return 'not_found'
   try {
-    const admin = createAdminClient()
-    const { data, error } = await admin
-      .from('report_shares')
-      .select('password_hash, revoked_at, expires_at')
-      .eq('token', token)
-      .maybeSingle()
-    if (error || !data || data.revoked_at) return 'not_found'
-    if (data.expires_at && Date.parse(data.expires_at) <= Date.now()) return 'not_found'
-    return data.password_hash ? 'needs_password' : 'open'
+    const r = await reportShareGate(createAdminClient(), { token, password })
+    return r.ok ? r.data.status : 'not_found'
   } catch {
     return 'not_found'
   }

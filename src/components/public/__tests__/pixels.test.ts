@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
-import { initialConsent, parseCustomScript, pixelEventPlan, selectPixels, type PixelRow } from '../pixels/policy'
+import { allowScriptAttrs, initialConsent, parseCustomScript, pixelEventPlan, selectPixels, type PixelRow } from '../pixels/policy'
 import { fileIdFromPath, fileIdsFromAnswers, hiddenFromSearch } from '../protocol'
 
 const ROWS: PixelRow[] = [
   { id: 'p1', type: 'ga4', value: 'G-ABC1234' },
   { id: 'p2', type: 'meta', value: '123456789012' },
   { id: 'p3', type: 'gtm', value: 'GTM-ABCD12' },
-  { id: 'p4', type: 'custom_script', value: '<script>x()</script>', parsed: { parts: [{ kind: 'script', inline: 'x()' }] } },
+  {
+    id: 'p4',
+    type: 'custom_script',
+    value: '<script>x()</script>',
+    parsed: { version: 1, parts: [{ kind: 'script', src: null, code: 'x()', attrs: {} }] },
+  },
 ]
 
 const ids = (rows: { id: string }[]) => rows.map((r) => r.id)
@@ -44,21 +49,63 @@ describe('selectPixels', () => {
 })
 
 describe('parseCustomScript', () => {
-  it('keeps https src and inline scripts, drops noscript and insecure src', () => {
+  it('reads the stored settings shape: https src or inline code, noscript kept for <noscript>', () => {
     expect(
       parseCustomScript({
+        version: 1,
         parts: [
-          { kind: 'script', src: 'https://cdn.example.org/a.js', async: true },
-          { kind: 'script', src: 'http://cdn.example.org/b.js' },
-          { kind: 'script', src: 'javascript:alert(1)' },
-          { kind: 'script', inline: 'window.x=1' },
-          { kind: 'noscript', html: '<img src=x>' },
+          { kind: 'script', src: 'https://cdn.example.org/a.js', code: null, attrs: { async: true } },
+          { kind: 'script', src: 'http://cdn.example.org/b.js', code: null, attrs: {} },
+          { kind: 'script', src: 'javascript:alert(1)', code: null, attrs: {} },
+          { kind: 'script', src: null, code: 'window.x=1', attrs: {} },
+          { kind: 'noscript', html: '<img src="https://px.example.org/p.gif">' },
         ],
       }),
     ).toEqual([
-      { kind: 'script', src: 'https://cdn.example.org/a.js', async: true, defer: false },
-      { kind: 'script', inline: 'window.x=1' },
+      { kind: 'script', src: 'https://cdn.example.org/a.js', code: null, attrs: { async: true } },
+      { kind: 'script', src: null, code: 'window.x=1', attrs: {} },
+      { kind: 'noscript', html: '<img src="https://px.example.org/p.gif">' },
     ])
+  })
+
+  it('treats attrs as an allow list', () => {
+    const [part] = parseCustomScript({
+      version: 1,
+      parts: [
+        {
+          kind: 'script',
+          src: 'https://cdn.example.org/a.js',
+          code: null,
+          attrs: {
+            async: true,
+            defer: true,
+            type: 'Module',
+            id: 'vendor-loader',
+            'data-account': '42',
+            onload: 'steal()',
+            ONERROR: 'steal()',
+            nonce: 'abc',
+            src: 'https://evil.example.org/x.js',
+            crossorigin: 'anonymous',
+            style: 'x',
+            'data-<bad>': '1',
+          },
+        },
+      ],
+    })
+    expect(part).toEqual({
+      kind: 'script',
+      src: 'https://cdn.example.org/a.js',
+      code: null,
+      attrs: { async: true, defer: true, type: 'module', id: 'vendor-loader', 'data-account': '42' },
+    })
+    expect(allowScriptAttrs({ type: 'text/html', id: '1bad"x' })).toEqual({})
+  })
+
+  it('ignores the pre-0018 reader shape and documents without a script', () => {
+    expect(parseCustomScript({ parts: [{ kind: 'script', inline: 'x()' }] })).toEqual([])
+    expect(parseCustomScript({ version: 1, parts: [{ kind: 'noscript', html: '<img src=x>' }] })).toEqual([])
+    expect(parseCustomScript([{ kind: 'script', src: null, code: 'x()', attrs: {} }])).toEqual([])
   })
 })
 

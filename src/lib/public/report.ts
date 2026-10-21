@@ -1,9 +1,9 @@
 import 'server-only'
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { insertAbuseReport, type ABUSE_REASONS } from './db'
+import { insertAbuseReport, type ABUSE_REASONS } from '@/lib/db/admin'
 import { clientIp, json, readJsonBody } from './http'
-import { resolveSurvey, surveyContext } from './load'
+import { resolveSurvey } from './load'
 import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret } from './ratelimit'
 import { verifyTurnstile } from './turnstile'
 
@@ -61,12 +61,11 @@ export async function handleReport(req: Request): Promise<Response> {
 
   const slug = body.slug.toLowerCase()
   const survey = slug ? await resolveSurvey(slug) : null
-  const ctx = survey ? await surveyContext(survey.survey_id) : null
   const { reason, prefix } = storedReason(body.reason)
   const details = [prefix, body.details || null].filter(Boolean).join(': ') || null
   const r = await insertAbuseReport(admin, {
     survey_id: survey?.survey_id ?? null,
-    workspace_id: ctx?.workspaceId ?? null,
+    workspace_id: survey?.workspace_id ?? null,
     slug_text: slug,
     reason,
     details: details ? details.slice(0, 2000) : null,

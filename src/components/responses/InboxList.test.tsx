@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { act, cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { InboxRow } from '@/lib/crm/data/responses'
+import type { InboxRow } from '@/lib/db/responses'
 import { InboxList } from './InboxList'
 import type { ChangeSignal } from './realtime'
 import { unreadStore } from './unreadStore'

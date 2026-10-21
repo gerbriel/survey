@@ -6,7 +6,16 @@ import type { WorkspaceRole } from '@/types/db-helpers'
 import { createServerClient } from '@/lib/supabase/server'
 import type { UserClient } from '@/lib/supabase/types'
 import { getProfile, type Profile } from '@/lib/db/profiles'
-import { getMembership, getWorkspaceBySlug, listMemberships, type MembershipSummary, type Workspace } from '@/lib/db/workspaces'
+import {
+  getMembership,
+  getSlugHistory,
+  getWorkspaceById,
+  getWorkspaceBySlug,
+  listMemberships,
+  type MembershipSummary,
+  type Workspace,
+} from '@/lib/db/workspaces'
+import { slugRedirectActive } from '@/lib/admin/lifecycle'
 import { loginPath, PENDING_PATH } from './paths'
 import { memberCan } from './roles'
 
@@ -70,10 +79,24 @@ export type RequireMemberOptions = {
 }
 
 /**
+ * The current slug of a renamed workspace when `slug` was released less than
+ * 30 days ago (workspace_slug_history, doc 05 section 1.2), else null. RLS
+ * returns history rows only to members of the workspace.
+ */
+export async function renamedWorkspaceSlug(supabase: UserClient, slug: string): Promise<string | null> {
+  const hist = await getSlugHistory(supabase, { slug })
+  if (!hist.ok || !hist.data?.workspace_id || !slugRedirectActive(hist.data.released_at)) return null
+  const ws = await getWorkspaceById(supabase, { workspaceId: hist.data.workspace_id })
+  return ws.ok && ws.data && !ws.data.deleted_at ? ws.data.slug : null
+}
+
+/**
  * Member of the workspace with at least `minRole`, else redirect to login or
- * pending, or 404 for a workspace the caller cannot see. A platform admin who
- * is not a member gets a 404 too: admins do not read workspace data unless
- * they are members (00 "Tenancy and authorization").
+ * pending, or 404 for a workspace the caller cannot see. An old slug of a
+ * renamed workspace redirects to /w/{current slug}, so nested pages do not
+ * 404 after a rename. A platform admin who is not a member gets a 404 too:
+ * admins do not read workspace data unless they are members (00 "Tenancy and
+ * authorization").
  */
 export async function requireMember(
   workspaceSlug: string,
@@ -82,6 +105,10 @@ export async function requireMember(
 ): Promise<MemberContext> {
   const ctx = await requireUser({ next: `/w/${workspaceSlug}` })
   const ws = await getWorkspaceBySlug(ctx.supabase, { slug: workspaceSlug })
+  if (ws.ok && !ws.data) {
+    const current = await renamedWorkspaceSlug(ctx.supabase, workspaceSlug)
+    if (current) redirect(`/w/${encodeURIComponent(current)}`)
+  }
   if (!ws.ok || !ws.data) notFound()
   const membership = await getMembership(ctx.supabase, { workspaceId: ws.data.id, userId: ctx.user.id })
   const role = membership.ok ? membership.data : null

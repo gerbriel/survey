@@ -85,8 +85,9 @@ export function SharedWidget({ w }: { w: SafeSharedWidget }) {
       const rows = [...new Set(data.map((d) => d.row_id ?? ''))]
       const cols = [...new Set(data.map((d) => d.column_id ?? ''))]
       const cells: HeatCell[][] = rows.map((rid) => cols.map((cid) => suppressCount(data.find((d) => d.row_id === rid && d.column_id === cid)?.count ?? 0, false)))
-      // TODO(foundation): the payload carries no matrix row and column labels; ids are shown.
-      return <Heatmap title={title} description={nText} rows={rows} columns={cols} cells={cells} />
+      const rowLabel = (id: string) => w.rows?.find((o) => o.id === id)?.label ?? id
+      const colLabel = (id: string) => w.columns?.find((o) => o.id === id)?.label ?? id
+      return <Heatmap title={title} description={nText} rows={rows.map(rowLabel)} columns={cols.map(colLabel)} cells={cells} />
     }
     if (data.some((d) => d.avg_position !== undefined && d.avg_position !== null)) {
       return (

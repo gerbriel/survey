@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireMember } from '@/lib/auth'
-import { deleteResponse, getInboxRow, type InboxRow } from '@/lib/crm/data/responses'
+import { deleteResponse, getInboxRow, type InboxRow } from '@/lib/db/responses'
 
 /**
  * Realtime refetch: the inbox passes only the id from the change event and

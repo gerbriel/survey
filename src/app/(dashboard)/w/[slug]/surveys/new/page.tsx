@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireMember } from '@/lib/auth'
-import { listTemplates } from '@/lib/builder/queries'
+import { listTemplates } from '@/lib/db/templates'
 import { fillTheme } from '@/lib/builder/defaults'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { NewSurvey, type TemplateCard } from '@/components/builder/NewSurvey'

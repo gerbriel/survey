@@ -5,7 +5,7 @@ export function fakeClient(result: { data: unknown; error: unknown } = { data: n
   const calls: { fn: string; args: unknown }[] = []
   const builder = () => {
     const p = Promise.resolve(result)
-    return { then: p.then.bind(p), maybeSingle: () => Promise.resolve(result) }
+    return { then: p.then.bind(p), maybeSingle: () => Promise.resolve(result), single: () => Promise.resolve(result) }
   }
   const client = {
     rpc(fn: string, args?: unknown) {

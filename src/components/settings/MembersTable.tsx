@@ -15,6 +15,8 @@ type Action = (prev: ActionState, form: FormData) => Promise<ActionState>
 export type MemberView = {
   userId: string
   name: string
+  /** Sign-in email; shown to admins and the owner only (workspace_members_with_email). */
+  email?: string | null
   avatarUrl: string | null
   role: WorkspaceRole
   joined: string
@@ -92,6 +94,7 @@ export function MembersTable({
                       {m.name}
                       {isSelf ? <span className="text-muted"> (you)</span> : null}
                     </div>
+                    {m.email ? <div className="text-xs text-muted">{m.email}</div> : null}
                     {m.inviteLabel ? <div className="text-xs text-muted">Invite: {m.inviteLabel}</div> : null}
                   </div>
                 </div>

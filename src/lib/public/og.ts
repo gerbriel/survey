@@ -1,7 +1,7 @@
 import 'server-only'
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { ogCard, type OgCard } from './db'
+import { ogCard, type OgCard } from '@/lib/db/publicRead'
 import { publicAssetUrl } from './load'
 
 /**

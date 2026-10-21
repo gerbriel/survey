@@ -1,5 +1,7 @@
 import { z } from 'zod'
+import type { Json } from '@/types/db-helpers'
 import type { AdminClient } from '@/lib/supabase/types'
+import type { DbResult } from './errors'
 import { asJson, call, id, jsonObject } from './rpc'
 
 /**
@@ -108,4 +110,92 @@ export function rateLimitHit(client: AdminClient, input: z.input<typeof rateLimi
     (v) => client.rpc('rate_limit_hit', { p_bucket: v.bucket, p_key: v.key, p_window: v.window, p_max: v.max }),
     (d): boolean => d === true,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Service role reads for the submit and resume handlers.
+// ---------------------------------------------------------------------------
+
+export type PublishedVersion = {
+  id: string
+  survey_id: string
+  workspace_id: string
+  version_no: number
+  definition: Json
+}
+
+export const publishedVersionInput = z.object({ versionId: id, surveyId: id })
+
+/** The full (server-only) definition of a published version of the survey. */
+export function publishedVersion(admin: AdminClient, input: z.input<typeof publishedVersionInput>) {
+  return call(
+    publishedVersionInput,
+    input,
+    (v) =>
+      admin
+        .from('survey_versions')
+        .select('id, survey_id, workspace_id, version_no, definition')
+        .eq('id', v.versionId)
+        .eq('survey_id', v.surveyId)
+        .eq('status', 'published')
+        .maybeSingle(),
+    (row): PublishedVersion | null => (row ? (row as PublishedVersion) : null),
+  )
+}
+
+export type ResumeRows = {
+  response: {
+    id: string
+    survey_version_id: string
+    metadata: Json
+    last_question_key: string | null
+    started_at: string
+  }
+  answers: {
+    question_key: string
+    value_text: string | null
+    value_number: number | null
+    value_date: string | null
+    value_json: Json | null
+  }[]
+  files: { id: string; question_key: string; object_path: string; original_name: string; declared_size: number; declared_mime: string }[]
+}
+
+export const resumeStateInput = z.object({ surveyId: id, resumeTokenHash: sha256Hex })
+
+/** An open partial by resume hash, with its answers and files. Null when unknown or complete. */
+export async function resumeState(admin: AdminClient, input: z.input<typeof resumeStateInput>): Promise<DbResult<ResumeRows | null>> {
+  const head = await call(resumeStateInput, input, (v) =>
+    admin
+      .from('responses')
+      .select('id, survey_version_id, metadata, last_question_key, started_at')
+      .eq('survey_id', v.surveyId)
+      .eq('resume_token_hash', v.resumeTokenHash)
+      .eq('status', 'partial')
+      .maybeSingle(),
+  )
+  if (!head.ok) return head
+  if (!head.data) return { ok: true, data: null }
+  const response = head.data as ResumeRows['response']
+  const byResponse = z.object({ responseId: id })
+  const answers = await call(byResponse, { responseId: response.id }, (v) =>
+    admin.from('answers').select('question_key, value_text, value_number, value_date, value_json').eq('response_id', v.responseId),
+  )
+  if (!answers.ok) return answers
+  const files = await call(byResponse, { responseId: response.id }, (v) =>
+    admin
+      .from('response_files')
+      .select('id, question_key, object_path, original_name, declared_size, declared_mime')
+      .eq('response_id', v.responseId)
+      .order('created_at'),
+  )
+  if (!files.ok) return files
+  return {
+    ok: true,
+    data: {
+      response,
+      answers: (answers.data ?? []) as ResumeRows['answers'],
+      files: (files.data ?? []) as ResumeRows['files'],
+    },
+  }
 }

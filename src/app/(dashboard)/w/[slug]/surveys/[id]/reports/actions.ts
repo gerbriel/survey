@@ -9,16 +9,18 @@ import {
   createShare,
   deleteReport,
   getReport,
-  getSurvey,
+  hashSharePassword,
   listReports,
   replaceWidgets,
   revokeShare,
+  SHARE_PASSWORD_MAX,
+  SHARE_PASSWORD_MIN,
   updateReport,
   widgetInput,
-} from '@/lib/analytics/data'
+} from '@/lib/db/reports'
+import { getSurvey } from '@/lib/db/surveys'
 import { parseFilters, reportFiltersFrom } from '@/lib/analytics/filters'
 import { loadSnapshots } from '@/lib/analytics/load'
-import { hashSharePassword, SHARE_PASSWORD_MAX, SHARE_PASSWORD_MIN } from '@/lib/analytics/password'
 import { defaultWidgets } from '@/lib/analytics/widgets'
 import { publicReportUrl } from '@/lib/analytics/share-url'
 
@@ -145,11 +147,14 @@ export async function createShareAction(slug: string, surveyId: string, reportId
   const rep = await getReport(m.supabase, { reportId })
   if (!rep.ok || !rep.data || rep.data.survey_id !== surveyId) return { ok: false, error: 'We could not find that report.' }
   const expiresAt = v.data.expiresDays ? new Date(Date.now() + v.data.expiresDays * 86400000).toISOString() : null
+  // bcrypt in SQL (hash_share_password); the plain password never reaches a table.
+  const hash = pw ? await hashSharePassword(m.supabase, { password: pw }) : null
+  if (hash && !hash.ok) return { ok: false, error: hash.error.message }
   const created = await createShare(m.supabase, {
     reportId,
     workspaceId: m.workspace.id,
     expiresAt,
-    passwordHash: pw ? hashSharePassword(pw) : null,
+    passwordHash: hash ? hash.data : null,
   })
   if (!created.ok) return { ok: false, error: created.error.message }
   revalidatePath(`${base(slug, surveyId)}/${reportId}`)

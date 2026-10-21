@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Button, Dialog, Input } from '@/components/ui'
 import { COLUMN_LABELS, CORE_COLUMNS } from '@/lib/crm/filters'
-import type { ContactView } from '@/lib/crm/data/contacts'
+import type { ContactView } from '@/lib/db/contacts'
 import { LinkButton } from './LinkButton'
 import type { ActionResult, FieldDef } from './types'
 

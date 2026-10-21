@@ -3,6 +3,9 @@
  * client components, which receive these as serialized props.
  */
 
+export type { AnswerLite, ResponseLite } from '@/lib/db/responses'
+export type { EventLite } from '@/lib/db/events'
+
 /** One question as normalized in the `questions` snapshot table (migration 0006). */
 export type QuestionSnapshot = {
   survey_version_id: string
@@ -16,39 +19,6 @@ export type QuestionSnapshot = {
   options: { id: string; label: string }[] | null
   /** The full question settings object from the definition (config.settings). */
   settings: Record<string, unknown>
-}
-
-/** An answers row without the tenancy columns. */
-export type AnswerLite = {
-  response_id: string
-  question_key: string
-  survey_version_id: string
-  value_text: string | null
-  value_number: number | null
-  value_date: string | null
-  value_json: unknown
-}
-
-/** The response columns analytics needs. */
-export type ResponseLite = {
-  id: string
-  survey_version_id: string
-  status: 'partial' | 'complete'
-  started_at: string
-  submitted_at: string | null
-  contact_id: string | null
-  identity_source: string | null
-  respondent_token_id: string | null
-  metadata: Record<string, unknown>
-}
-
-/** An events row without the tenancy columns. */
-export type EventLite = {
-  respondent_hash: string | null
-  type: string
-  question_key: string | null
-  occurred_at: string
-  meta: Record<string, unknown>
 }
 
 export type OptionCount = { id: string; label: string; count: number; pct: number; base: number }

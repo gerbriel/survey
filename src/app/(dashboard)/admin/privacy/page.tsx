@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { getPlatformSettings } from '@/lib/admin/db/platform'
+import { getPlatformSettings } from '@/lib/db/admin'
 import { formatDateTime } from '@/lib/admin/lifecycle'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { PrivacyNoticeEditor } from '@/components/admin/PrivacyNoticeEditor'

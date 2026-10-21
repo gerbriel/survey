@@ -15,8 +15,8 @@ export const SHARE_TOKEN_RE = /^[A-Za-z0-9_-]{8,100}$/
 export const SHARED_PAYLOAD_KEYS = new Set([
   // envelope
   'report', 'survey', 'workspace', 'widgets', 'name', 'title',
-  // widget
-  'id', 'position', 'chart_type', 'question_key', 'metric', 'label', 'options', 'result',
+  // widget ('rows' and 'columns' are matrix labels, {id, label}, widget level only)
+  'id', 'position', 'chart_type', 'question_key', 'metric', 'label', 'options', 'rows', 'columns', 'result',
   // result
   'n', 'suppressed', 'type', 'data', 'funnel', 'views', 'starts', 'completes',
   // data items
@@ -70,6 +70,9 @@ export type SafeSharedWidget = {
   metric: string | null
   label: string | null
   options: { id: string; label: string }[] | null
+  /** Matrix row and column labels; null for other question types. */
+  rows: { id: string; label: string }[] | null
+  columns: { id: string; label: string }[] | null
   result: SharedResult
 }
 
@@ -86,6 +89,20 @@ export function sanitizeSharedPayload(raw: unknown): SafeSharedPayload | null {
   const c = clean(raw, 0) as Record<string, unknown>
   const str = (o: unknown, k: string) => (o && typeof o === 'object' && typeof (o as Record<string, unknown>)[k] === 'string' ? ((o as Record<string, unknown>)[k] as string) : '')
   const widgets = Array.isArray(c.widgets) ? (c.widgets as Record<string, unknown>[]) : []
+  const labels = (v: unknown) =>
+    Array.isArray(v)
+      ? (v as Record<string, unknown>[])
+          .filter((o) => o && typeof o.id === 'string')
+          .map((o) => ({ id: o.id as string, label: typeof o.label === 'string' ? o.label : (o.id as string) }))
+      : null
+  /** rows and columns are allowed only as widget level labels, never inside a result. */
+  const result = (v: unknown): SharedResult => {
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return {}
+    const rest: Record<string, unknown> = { ...(v as Record<string, unknown>) }
+    delete rest.rows
+    delete rest.columns
+    return rest as SharedResult
+  }
   return {
     report: { name: str(c.report, 'name') },
     survey: { title: str(c.survey, 'title') },
@@ -97,12 +114,10 @@ export function sanitizeSharedPayload(raw: unknown): SafeSharedPayload | null {
       question_key: typeof w.question_key === 'string' ? w.question_key : null,
       metric: typeof w.metric === 'string' ? w.metric : null,
       label: typeof w.label === 'string' ? w.label : null,
-      options: Array.isArray(w.options)
-        ? (w.options as Record<string, unknown>[])
-            .filter((o) => typeof o.id === 'string')
-            .map((o) => ({ id: o.id as string, label: typeof o.label === 'string' ? o.label : (o.id as string) }))
-        : null,
-      result: (w.result && typeof w.result === 'object' ? w.result : {}) as SharedResult,
+      options: labels(w.options),
+      rows: labels(w.rows),
+      columns: labels(w.columns),
+      result: result(w.result),
     })),
   }
 }

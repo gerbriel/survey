@@ -126,6 +126,22 @@ describe('wrappers call the exact SQL function and argument names', () => {
     ['recordEvents', (f) => events.recordEvents(f.admin, []), 'record_events', { p_events: [] }],
     ['rateLimitHit', (f) => submission.rateLimitHit(f.admin, { bucket: 'submit', key: 'ip', window: '1 hour', max: 20 }), 'rate_limit_hit', { p_bucket: 'submit', p_key: 'ip', p_window: '1 hour', p_max: 20 }],
     ['effectiveLimits', (f) => limits.getEffectiveLimits(f.user, { workspaceId: A }), 'effective_limits', { p_workspace_id: A }],
+    // Migration 0018
+    ['logExport', (f) => exportsDb.logExport(f.user, { workspaceId: A, kind: 'summary', scope: { survey_id: B }, rowCount: 3 }), 'log_export', { p_workspace_id: A, p_kind: 'summary', p_scope: { survey_id: B }, p_row_count: 3 }],
+    ['finishImport', (f) => contacts.finishImport(f.user, { importId: A }), 'finish_import', { p_import_id: A, p_summary: { status: 'done' } }],
+    ['adminWorkspaceStats', (f) => admin.adminWorkspaceStats(f.user), 'admin_workspace_stats', undefined],
+    ['invitePreview', (f) => invites.invitePreview(f.user, { token: 'tok12345' }), 'invite_preview', { p_token: 'tok12345' }],
+    ['membersWithEmail', (f) => workspaces.listMembersWithEmail(f.user, { workspaceId: A }), 'workspace_members_with_email', { p_workspace_id: A }],
+    ['pendingStorageDeletions', (f) => admin.pendingStorageDeletions(f.admin, { workspaceId: A }), 'pending_storage_deletions', { p_workspace_id: A }],
+    ['issuePlatformInvite', (f) => admin.adminIssuePlatformInvite(f.user, { email: 'A@b.co', note: null, expiresInDays: 7 }), 'admin_issue_platform_invite', { p_email: 'a@b.co', p_expires_in_days: 7 }],
+    ['revokePlatformInvite', (f) => admin.adminRevokePlatformInvite(f.user, { inviteId: A }), 'admin_revoke_platform_invite', { p_invite_id: A }],
+    ['updatePrivacyNotice', (f) => admin.adminUpdatePrivacyNotice(f.user, { markdown: '# N' }), 'admin_update_privacy_notice', { p_markdown: '# N' }],
+    ['abuseStatus', (f) => admin.adminSetAbuseReportStatus(f.user, { reportId: A, status: 'dismissed' }), 'admin_set_abuse_report_status', { p_report_id: A, p_status: 'dismissed' }],
+    ['dismissAccess', (f) => admin.adminDismissAccessRequest(f.user, { requestId: A }), 'admin_dismiss_access_request', { p_request_id: A }],
+    ['dismissWorkspace', (f) => admin.adminDismissWorkspaceRequest(f.user, { requestId: A }), 'admin_dismiss_workspace_request', { p_request_id: A }],
+    ['hashSharePassword', (f) => reports.hashSharePassword(f.user, { password: 'secret12' }), 'hash_share_password', { p_password: 'secret12' }],
+    ['shareGate', (f) => reports.reportShareGate(f.admin, { token: 'tok12345' }), 'report_share_gate', { p_token: 'tok12345' }],
+    ['shareGate password', (f) => reports.reportShareGate(f.admin, { token: 'tok12345', password: 'pw' }), 'report_share_gate', { p_token: 'tok12345', p_password: 'pw' }],
   ]
 
   it.each(cases)('%s', async (_name, run, fn, args) => {
@@ -150,6 +166,30 @@ describe('wrappers call the exact SQL function and argument names', () => {
       p_payload: { action: 'save', survey_id: A, survey_version_id: B, idempotency_key: A, answers: {}, visible_keys: [], metadata: {}, file_ids: [] },
     })
     expect(r).toEqual({ ok: true, data: { ok: false, code: 'cap_reached' } })
+  })
+})
+
+describe('0018 wrappers map results', () => {
+  it('reportShareGate reads status and hides report_id unless open', async () => {
+    const open = fakeClient({ data: { status: 'open', report_id: A }, error: null })
+    expect(await reports.reportShareGate(open.admin, { token: 'tok12345' })).toEqual({ ok: true, data: { status: 'open', report_id: A } })
+    const pw = fakeClient({ data: { status: 'needs_password', report_id: null }, error: null })
+    expect(await reports.reportShareGate(pw.admin, { token: 'tok12345' })).toEqual({ ok: true, data: { status: 'needs_password', report_id: null } })
+    const odd = fakeClient({ data: { status: 'weird', report_id: A }, error: null })
+    expect(await reports.reportShareGate(odd.admin, { token: 'tok12345' })).toEqual({ ok: true, data: { status: 'not_found', report_id: null } })
+  })
+
+  it('logExport refuses an unknown kind before the network', async () => {
+    const f = fakeClient()
+    const r = await exportsDb.logExport(f.user, { workspaceId: A, kind: 'everything' as never, rowCount: 1 })
+    expect(r.ok).toBe(false)
+    expect(f.calls).toEqual([])
+  })
+
+  it('hashSharePassword enforces 6 to 200 characters', async () => {
+    const f = fakeClient()
+    expect((await reports.hashSharePassword(f.user, { password: 'short' })).ok).toBe(false)
+    expect(f.calls).toEqual([])
   })
 })
 

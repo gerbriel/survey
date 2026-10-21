@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
-import { getOpenAccessRequest } from '@/lib/admin/db/requests'
+import { getOpenAccessRequest } from '@/lib/db/admin'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { SignOutButton } from '@/components/dashboard/SignOutButton'
 import { AccessRequestForm, CheckAgainForm } from '@/components/settings/OnboardingForms'

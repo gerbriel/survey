@@ -25,7 +25,12 @@ vi.mock('@/lib/db/publicRead', () => ({
 
 const rateLimitHit = vi.fn()
 const submitResponse = vi.fn()
+const publishedVersion = vi.fn()
 vi.mock('@/lib/db/submission', () => ({
+  publishedVersion: (_c: unknown, input: unknown) => {
+    calls.push('version')
+    return publishedVersion(input)
+  },
   rateLimitHit: (_c: unknown, input: { bucket: string }) => {
     calls.push(`rate:${input.bucket}`)
     return rateLimitHit(input)
@@ -38,18 +43,11 @@ vi.mock('@/lib/db/submission', () => ({
 
 vi.mock('@/lib/db/limits', () => ({
   GLOBAL_LIMIT_DEFAULTS: { rate_limit_per_hour: 20, raw_script_pixels_allowed: true, max_files_per_response: 20 },
-  getEffectiveLimits: async () => ({ ok: true, data: { rate_limit_per_hour: 7, raw_script_pixels_allowed: true, max_files_per_response: 20 } }),
-}))
-
-const publishedVersion = vi.fn()
-vi.mock('@/lib/public/db', () => ({
-  surveyWorkspace: async () => {
+  // resolve_public_survey returns workspace_id (0018), so the context step reads only the limits.
+  getEffectiveLimits: async (_c: unknown, input: { workspaceId: string }) => {
     calls.push('context')
-    return { ok: true, data: { id: SURVEY_ID, workspace_id: WS_ID } }
-  },
-  publishedVersion: (_c: unknown, input: unknown) => {
-    calls.push('version')
-    return publishedVersion(input)
+    expect(input.workspaceId).toBe(WS_ID)
+    return { ok: true, data: { rate_limit_per_hour: 7, raw_script_pixels_allowed: true, max_files_per_response: 20 } }
   },
 }))
 
@@ -82,6 +80,7 @@ const OPEN = {
   og_description: null,
   og_image_path: null,
   allow_indexing: false,
+  workspace_id: WS_ID,
   workspace_name: 'W',
   logo_path: null,
   show_powered_by: true,

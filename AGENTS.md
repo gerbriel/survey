@@ -95,9 +95,34 @@ const r = await saveDraft(supabase, { versionId, expectedRevision, definition })
 if (!r.ok) switch (r.error.code) { case 'revision_conflict': ...; case 'lock_lost': ... }
 ```
 
-Wrappers never throw. `unwrap(result)` from `@/lib/db/errors` throws a `DbException` for code that prefers exceptions. A module that needs a new table query adds a wrapper in `src/lib/db` (Phase 2 agents may add files there for their own tables; keep one area per file).
+Wrappers never throw. `unwrap(result)` from `@/lib/db/errors` throws a `DbException` for code that prefers exceptions. A module that needs a new query adds a wrapper to the matching file below (one area per file; add a file only when none fits). Library modules (`src/lib/analytics`, `src/lib/crm`, `src/lib/public`, ...) call the wrappers too; they do not keep local `call()` wrappers.
 
-Files: `workspaces.ts`, `profiles.ts`, `invites.ts`, `surveys.ts`, `publish.ts`, `publicRead.ts` (anon client only), `submission.ts`, `events.ts` (service role), `contacts.ts`, `responses.ts`, `reports.ts`, `exports.ts` (storage cleanup jobs), `privacy.ts`, `admin.ts` (platform admin and purge), `limits.ts` (`GLOBAL_LIMIT_DEFAULTS`, pinned to SQL by a test), `errors.ts`, `rpc.ts`.
+`src/app` never imports `src/lib/db/rpc.ts` (the `call` plumbing and shared zod schemas); ESLint refuses it. Schemas a form needs are re-exported by the wrapper file (for example `workspaceSlug` from `workspaces.ts`).
+
+Exceptions, all server-only code under `src/lib`: Storage API calls (uploads, signed URLs, removals) and the Auth admin API (`src/lib/admin/service.ts`) are not SQL and stay in the module that needs them; the queued Storage removal shared by purge, retention and erase is `removeQueuedObjects` in `exports.ts`.
+
+Files:
+
+| File | Area | Clients |
+|---|---|---|
+| `workspaces.ts` | workspace reads, lifecycle functions, settings writes, logo storage, slug history, members (`listMembers`, `listMembersWithEmail`), activity log | user |
+| `profiles.ts` | profile read, `last_workspace_id`, `is_platform_admin` | user |
+| `invites.ts` | invite claiming, `invitePreview`, workspace invite links | user |
+| `admin.ts` | platform admin functions, self-auditing `admin_*` writes, `adminWorkspaceStats`, platform reads, access and workspace requests, purge (`workspacePurgeDue`, `purgeWorkspace`, `pendingStorageDeletions`), `privacyNotice` and `insertAbuseReport` for public routes, `insertPlatformAudit` for Auth admin API actions only | user, service role where noted |
+| `pixels.ts` | workspace pixels | user |
+| `surveys.ts` | create, alias, locks, autosave, survey and version reads, settings update | user (reads also service role) |
+| `templates.ts` | survey templates | user |
+| `publish.ts` | `publish_survey_version` | user |
+| `publicRead.ts` | `resolve_public_survey`, `get_public_definition` (anon only), `ogCard` (service role) | anon, service role |
+| `submission.ts` | `submit_response`, `create_upload`, `rate_limit_hit`, published version and resume reads | service role |
+| `events.ts` | `record_events` (service role), `readEvents` (user) | both |
+| `contacts.ts` | contact functions, CRM table queries, `finishImport`, export lookups | user |
+| `responses.ts` | `filtered_responses` paging and counts, answers, inbox and response detail, file links | user (reads also service role) |
+| `reports.ts` | `shared_report_payload` and `reportShareGate` (service role), `hashSharePassword`, reports, widgets, shares, dashboard counts | user, service role |
+| `exports.ts` | storage cleanup jobs, `removeQueuedObjects`, export jobs, `logExport` (`log_export`) | user, service role |
+| `privacy.ts` | erase, GDPR export, retention, respondent finder | user, service role |
+| `limits.ts` | `effective_limits`, `GLOBAL_LIMIT_DEFAULTS` (pinned to SQL by a test) | user, service role |
+| `errors.ts`, `rpc.ts` | error contract; `call` plumbing, shared schemas and paging helpers | library only |
 
 ### Error code contract
 
@@ -155,12 +180,12 @@ From `docs/06-build-plan.md`. An agent writes only inside its rows. Any file not
 | `src/components/builder/*` | 2B |
 | `src/lib/survey/` | 1B |
 | `src/lib/supabase/` | 1D (Phase 0 left throwing stubs) |
-| `src/lib/db/` | 1D |
+| `src/lib/db/` | 1D; I2 consolidated every module's wrappers here |
 | `src/lib/public/` | 2C |
 | `src/lib/qr.ts` | 2B |
-| `src/lib/crm/` | 2D |
+| `src/lib/crm/` (no data access since I2) | 2D |
 | `src/lib/analytics/`, `src/lib/exports/` | 2E |
-| `src/lib/admin/` | 2A |
+| `src/lib/admin/` (no data access; wrappers moved to `src/lib/db` in I2) | 2A |
 | `src/types/database.ts` | 1D, generated |
 | `tests/unit/` | each module adds its own |
 | `tests/e2e/` | 3A |

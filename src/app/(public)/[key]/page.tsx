@@ -77,7 +77,7 @@ export default async function SurveyPage({ params }: Props) {
     return <ClosedStateScreen title={s.title} message={s.closed_message} logoUrl={logoUrl} footer={footer} />
   }
 
-  const ctx = await surveyContext(s.survey_id)
+  const ctx = await surveyContext(s)
   const { pixels, mode } = await pixelsFor(s, loaded.definition, ctx)
   const fonts = themeFonts((loaded.definition as { theme?: Theme } | null)?.theme)
   const supabase = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, '')
@@ -89,7 +89,7 @@ export default async function SurveyPage({ params }: Props) {
         surveyKey={key}
         surveyId={s.survey_id}
         versionId={loaded.survey.version_id}
-        workspaceId={ctx?.workspaceId ?? null}
+        workspaceId={s.workspace_id}
         workspaceName={s.workspace_name}
         definition={loaded.definition}
         serverSeed={generateResponseSeed()}

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import { Badge, Button, Input, Select } from '@/components/ui'
-import type { ContactPatch } from '@/lib/crm/data/contacts'
+import type { ContactPatch } from '@/lib/db/contacts'
 import { LEAD_STATUSES } from '@/lib/crm/import'
 import { displayName, STATUS_LABELS, type ActionResult, type Contact, type MemberLite } from './types'
 

@@ -1,9 +1,9 @@
 import 'server-only'
 import type { UserClient } from '@/lib/supabase/types'
-import { searchContacts, type ContactFilters } from '@/lib/db/contacts'
+import { searchContacts, type ContactFilters, listContactsByIds, type Contact, type FieldDef } from '@/lib/db/contacts'
 import { BOM, csvLine } from './csv'
 import { chunk } from './import'
-import { listContactsByIds, type Contact, type FieldDef, type MemberLite } from './data/contacts'
+import { type MemberLite } from '@/lib/db/workspaces'
 
 /**
  * Contact CSV export (doc 04 section 1.6), streamed page by page through
@@ -12,10 +12,9 @@ import { listContactsByIds, type Contact, type FieldDef, type MemberLite } from 
  * Decision: the owner column holds the member's display name. Member emails
  * live in auth.users, which a member client cannot read.
  *
- * TODO(foundation): doc 04 section 6 requires an activity_log row per export
- * (actor, scope, filter, row count). activity_log has no insert policy and
- * write_activity is not granted to authenticated, so nothing reachable under
- * RLS can log it yet. See the Foundation change request in the 2D report.
+ * Doc 04 section 6 requires an activity_log row per export (actor, scope,
+ * filter, row count): the route passes onDone, which calls log_export once
+ * the last row is written.
  */
 export const MAX_EXPORT_ROWS = 50_000
 
@@ -70,12 +69,21 @@ export function exportRow(c: Contact, defs: FieldDef[], members: MemberLite[]): 
 
 export function contactsCsvStream(
   client: UserClient,
-  input: { workspaceId: string; filters: ContactFilters; ids?: string[]; defs: FieldDef[]; members: MemberLite[] },
+  input: {
+    workspaceId: string
+    filters: ContactFilters
+    ids?: string[]
+    defs: FieldDef[]
+    members: MemberLite[]
+    /** Called once after the last row, with the number of contact rows written. */
+    onDone?: (rows: number) => Promise<void>
+  },
 ): ReadableStream<Uint8Array> {
   const enc = new TextEncoder()
   return new ReadableStream<Uint8Array>({
     async start(controller) {
       controller.enqueue(enc.encode(BOM + csvLine(exportHeader(input.defs))))
+      let written = 0
       try {
         if (input.ids?.length) {
           for (const part of chunk(input.ids.slice(0, MAX_EXPORT_ROWS), 500)) {
@@ -83,6 +91,7 @@ export function contactsCsvStream(
             if (!r.ok) throw new Error(r.error.message)
             const live = r.data.filter((c) => c.status === 'active' && !c.merged_into)
             controller.enqueue(enc.encode(live.map((c) => csvLine(exportRow(c, input.defs, input.members))).join('')))
+            written += live.length
           }
         } else {
           let cursor: { updated_at: string; id: string } | null = null
@@ -93,11 +102,13 @@ export function contactsCsvStream(
             if (r.data.length === 0) break
             controller.enqueue(enc.encode(r.data.map((c) => csvLine(exportRow(c, input.defs, input.members))).join('')))
             total += r.data.length
+            written += r.data.length
             const last = r.data[r.data.length - 1]!
             cursor = { updated_at: last.updated_at, id: last.id }
             if (r.data.length < 200) break
           }
         }
+        await input.onDone?.(written)
         controller.close()
       } catch (e) {
         controller.error(e)

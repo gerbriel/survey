@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { countOpenAbuseReports, listAllWorkspaces } from '@/lib/admin/db/platform'
-import { listAccessRequests, listWorkspaceRequests } from '@/lib/admin/db/requests'
+import { countOpenAbuseReports, listAllWorkspaces, listAccessRequests, listWorkspaceRequests } from '@/lib/db/admin'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 
 /** Admin home: the queues that need attention. There is no email, so these counts are the only nudge. */

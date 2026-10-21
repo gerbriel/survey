@@ -1,7 +1,7 @@
 import 'server-only'
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { privacyNotice } from './db'
+import { privacyNotice } from '@/lib/db/admin'
 
 /**
  * The organization privacy notice a platform admin edits in /admin (doc 05),

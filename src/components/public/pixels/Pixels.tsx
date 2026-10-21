@@ -70,15 +70,23 @@ w.fbq('consent','grant');fb.forEach(function(id){w.fbq('init',id)});w.fbq('track
         <Script id="sv-meta" src="https://connect.facebook.net/en_US/fbevents.js" strategy="afterInteractive" nonce={nonce} />
       ) : null}
       {custom.map((p) =>
-        p.parts.map((part, i) =>
-          part.src ? (
-            <Script key={`${p.id}-${i}`} id={`sv-custom-${p.id}-${i}`} src={part.src} strategy="afterInteractive" nonce={nonce} />
+        p.parts.map((part, i) => {
+          const key = `${p.id}-${i}`
+          if (part.kind === 'noscript') {
+            // Only ever inside <noscript>: inert whenever scripts run.
+            return <noscript key={key} dangerouslySetInnerHTML={{ __html: part.html }} />
+          }
+          // attrs were allow listed in parseCustomScript: async, defer, type, id, data-*.
+          const { id: vendorId, ...attrs } = part.attrs
+          const id = typeof vendorId === 'string' ? vendorId : `sv-custom-${key}`
+          return part.src ? (
+            <Script key={key} {...attrs} id={id} src={part.src} strategy="afterInteractive" nonce={nonce} />
           ) : (
-            <Script key={`${p.id}-${i}`} id={`sv-custom-${p.id}-${i}`} strategy="afterInteractive" nonce={nonce}>
-              {part.inline}
+            <Script key={key} {...attrs} id={id} strategy="afterInteractive" nonce={nonce}>
+              {part.code}
             </Script>
-          ),
-        ),
+          )
+        }),
       )}
     </>
   )

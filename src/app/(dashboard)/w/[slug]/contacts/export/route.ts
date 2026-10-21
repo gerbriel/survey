@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthContext, memberCan } from '@/lib/auth'
-import { getMembership, getWorkspaceBySlug } from '@/lib/db/workspaces'
-import { listFieldDefs, listMembers } from '@/lib/crm/data/contacts'
+import { getMembership, getWorkspaceBySlug, listMembers } from '@/lib/db/workspaces'
+import { listFieldDefs } from '@/lib/db/contacts'
+import { logExport } from '@/lib/db/exports'
 import { contactsCsvStream } from '@/lib/crm/export'
 import { paramsToFilters } from '@/lib/crm/filters'
 
-/** Contact CSV export, editor and above (doc 04 section 1.6). RLS applies to every read. */
+/** Contact CSV export, editor and above (doc 04 section 1.6). RLS applies to every read; log_export records it. */
 export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: string }> }) {
   const { slug } = await ctx.params
   const auth = await getAuthContext()
@@ -33,6 +34,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ slug: strin
     ids,
     defs: defs.ok ? defs.data.filter((d) => !d.archived) : [],
     members: members.ok ? members.data : [],
+    onDone: async (rows) => {
+      const log = await logExport(auth.supabase, {
+        workspaceId: ws.data!.id,
+        kind: 'contacts',
+        scope: { filters, ...(ids.length ? { selected_ids: ids.length } : {}) },
+        rowCount: rows,
+      })
+      if (!log.ok) console.error('contact export log failed', log.error.code)
+    },
   })
   const date = new Date().toISOString().slice(0, 10)
   return new NextResponse(stream, {

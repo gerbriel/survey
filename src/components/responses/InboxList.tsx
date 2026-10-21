@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Badge, EmptyState, Table, TBody, Td, Th, THead, Tr } from '@/components/ui'
-import type { InboxRow } from '@/lib/crm/data/responses'
+import type { InboxRow } from '@/lib/db/responses'
 import { contactName, IDENTITY_LABELS } from './answers'
 import { formatDateTime } from './format'
 import { createRealtimeHandler, rowMatches, type ChangeSignal, type InboxMatchFilters } from './realtime'

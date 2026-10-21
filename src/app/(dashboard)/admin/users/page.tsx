@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { listProfiles } from '@/lib/admin/db/platform'
+import { listProfiles } from '@/lib/db/admin'
 import { listAuthUsers, membershipsByUser, type AuthUserSummary, type UserMembership } from '@/lib/admin/service'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { Badge } from '@/components/ui/Badge'

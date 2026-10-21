@@ -38,8 +38,9 @@ type Step = 'upload' | 'map' | 'options' | 'run' | 'done'
 /**
  * CSV import wizard (doc 04 section 1.5): upload and parse in the browser,
  * map columns, choose dedupe and defaults, preview, run in chunks of 500
- * through import_contacts_chunk, summary with invalid rows as CSV, then an
- * optional step that generates personal links for the imported contacts.
+ * through import_contacts_chunk, closed with finish_import, summary with
+ * invalid rows as CSV, then an optional step that generates personal links
+ * for the imported contacts.
  *
  * Decision: the original file is not stored in the imports bucket. Rows go
  * to the server in mapped chunks, so there is nothing to expire later.
@@ -52,6 +53,7 @@ export function ImportWizard({
   today,
   start: startImport,
   runChunk,
+  finish,
   generateLinks,
 }: {
   defaultCountry: string
@@ -65,6 +67,8 @@ export function ImportWizard({
     options: { on_match: 'skip' | 'fill' | 'overwrite'; default_tags: string[]; default_status?: (typeof LEAD_STATUSES)[number]; default_owner?: string },
   ) => Promise<ActionResult<string>>
   runChunk: (importId: string, rows: ImportRow[]) => Promise<ActionResult<ChunkResult>>
+  /** Closes the import job (finish_import) with the final counts. */
+  finish: (importId: string, summary: { created: number; updated: number; skipped: number; invalid: number }) => Promise<ActionResult>
   generateLinks: (emails: string[], surveyId: string, maxResponses: number) => Promise<ActionResult<{ csv: string; count: number; skipped: number }>>
 }) {
   const [step, setStep] = useState<Step>('upload')
@@ -154,6 +158,8 @@ export function ImportWizard({
         setProgress({ done: Math.min((i + 1) * CHUNK, mapped.valid.length), total: mapped.valid.length })
       }
       totals.invalid = bad.length
+      const closed = await finish(s.data, totals)
+      if (!closed.ok) setError(closed.message)
       setSummary(totals)
       setInvalidOut(bad.sort((a, b) => a.line - b.line))
       setEmails(ok)

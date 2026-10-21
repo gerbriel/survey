@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { countOpenAbuseReports } from '@/lib/admin/db/platform'
+import { countOpenAbuseReports } from '@/lib/db/admin'
 import { Nav } from '@/components/dashboard/Nav'
 import { SignOutButton } from '@/components/dashboard/SignOutButton'
 import { signOut } from '../login/actions'

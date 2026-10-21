@@ -11,6 +11,15 @@ import {
   adminSetWorkspaceLimits,
   createWorkspaceInput,
   restoreWorkspace,
+  adminIssuePlatformInvite,
+  createPlatformInviteInput,
+  adminRevokePlatformInvite,
+  adminSetAbuseReportStatus,
+  setProfileStatus,
+  adminUpdatePrivacyNotice,
+  updatePrivacyNoticeInput,
+  adminDismissAccessRequest,
+  adminDismissWorkspaceRequest,
 } from '@/lib/db/admin'
 import {
   archiveWorkspace,
@@ -18,17 +27,7 @@ import {
   transferWorkspaceOwnership,
   unarchiveWorkspace,
 } from '@/lib/db/workspaces'
-import {
-  createPlatformInvite,
-  createPlatformInviteInput,
-  revokePlatformInvite,
-  setAbuseReportStatus,
-  setProfileStatus,
-  updatePrivacyNotice,
-  updatePrivacyNoticeInput,
-} from '@/lib/admin/db/platform'
-import { dismissAccessRequest, dismissWorkspaceRequest } from '@/lib/admin/db/requests'
-import { auditPlatformAction, mintPasswordResetLink, setAuthBan } from '@/lib/admin/service'
+import { mintPasswordResetLink, setAuthBan } from '@/lib/admin/service'
 import { inviteUrl } from '@/lib/admin/links'
 import { failure, formBool, formFields, fromDbError, fromZodError, success, type ActionState } from '@/lib/admin/forms'
 import { parseLimitsForm } from '@/lib/admin/limits-form'
@@ -36,7 +35,8 @@ import { parseLimitsForm } from '@/lib/admin/limits-form'
 /**
  * Platform admin mutations (doc 05 section 6). requirePlatformAdmin is the
  * UX guard; the SQL functions and is_platform_admin() RLS policies are the
- * authorization. Service-role work goes through src/lib/admin/service.ts,
+ * authorization; the admin_* functions write the platform audit log
+ * themselves. Auth admin API work goes through src/lib/admin/service.ts,
  * which checks platform admin again before it creates the admin client.
  */
 
@@ -45,7 +45,7 @@ const idFrom = (form: FormData, key: string) => uuid.safeParse(form.get(key))
 
 // --- invites ---------------------------------------------------------------
 
-const inviteForm = createPlatformInviteInput.omit({ invitedBy: true }).extend({
+const inviteForm = createPlatformInviteInput.extend({
   expiresInDays: z.coerce.number().pipe(createPlatformInviteInput.shape.expiresInDays),
 })
 
@@ -53,12 +53,11 @@ export async function issuePlatformInvite(_prev: ActionState, form: FormData): P
   const ctx = await requirePlatformAdmin()
   const parsed = inviteForm.safeParse(formFields(form, ['email', 'note']))
   if (!parsed.success) return fromZodError(parsed.error)
-  const r = await createPlatformInvite(ctx.supabase, { invitedBy: ctx.user.id, ...parsed.data })
+  const r = await adminIssuePlatformInvite(ctx.supabase, parsed.data)
   if (!r.ok) {
     if (r.error.code === 'unique_violation') return failure('There is already an open invite for that email.', { email: 'Already invited.' })
     return fromDbError(r.error)
   }
-  await auditPlatformAction({ action: 'invite.create', targetType: 'invite', targetId: r.data.id, details: { email: r.data.email } })
   revalidatePath('/admin/invites')
   return success('Invite created. Copy the link and share it. Nothing is emailed.', { url: inviteUrl(r.data.token) })
 }
@@ -67,9 +66,8 @@ export async function revokePlatformInviteAction(_prev: ActionState, form: FormD
   const ctx = await requirePlatformAdmin()
   const id = idFrom(form, 'inviteId')
   if (!id.success) return failure('Pick an invite.')
-  const r = await revokePlatformInvite(ctx.supabase, { inviteId: id.data })
+  const r = await adminRevokePlatformInvite(ctx.supabase, { inviteId: id.data })
   if (!r.ok) return fromDbError(r.error)
-  await auditPlatformAction({ action: 'invite.revoke', targetType: 'invite', targetId: id.data })
   revalidatePath('/admin/invites')
   return success('Invite revoked.')
 }
@@ -90,9 +88,8 @@ export async function dismissAccessRequestAction(_prev: ActionState, form: FormD
   const ctx = await requirePlatformAdmin()
   const id = idFrom(form, 'requestId')
   if (!id.success) return failure('Pick a request.')
-  const r = await dismissAccessRequest(ctx.supabase, { requestId: id.data, reviewerId: ctx.user.id })
+  const r = await adminDismissAccessRequest(ctx.supabase, { requestId: id.data })
   if (!r.ok) return fromDbError(r.error)
-  await auditPlatformAction({ action: 'access_request.dismiss', targetType: 'user', targetId: null, details: { request_id: id.data } })
   revalidatePath('/admin', 'layout')
   return success('Request dismissed.')
 }
@@ -101,9 +98,8 @@ export async function dismissWorkspaceRequestAction(_prev: ActionState, form: Fo
   const ctx = await requirePlatformAdmin()
   const id = idFrom(form, 'requestId')
   if (!id.success) return failure('Pick a request.')
-  const r = await dismissWorkspaceRequest(ctx.supabase, { requestId: id.data, reviewerId: ctx.user.id })
+  const r = await adminDismissWorkspaceRequest(ctx.supabase, { requestId: id.data })
   if (!r.ok) return fromDbError(r.error)
-  await auditPlatformAction({ action: 'workspace_request.dismiss', targetType: 'workspace', targetId: null, details: { request_id: id.data } })
   revalidatePath('/admin', 'layout')
   return success('Request dismissed.')
 }
@@ -218,11 +214,10 @@ export async function setUserActive(_prev: ActionState, form: FormData): Promise
 
 export async function savePrivacyNotice(_prev: ActionState, form: FormData): Promise<ActionState> {
   const ctx = await requirePlatformAdmin()
-  const parsed = updatePrivacyNoticeInput.omit({ updatedBy: true }).safeParse({ markdown: String(form.get('markdown') ?? '') })
+  const parsed = updatePrivacyNoticeInput.safeParse({ markdown: String(form.get('markdown') ?? '') })
   if (!parsed.success) return fromZodError(parsed.error)
-  const r = await updatePrivacyNotice(ctx.supabase, { updatedBy: ctx.user.id, markdown: parsed.data.markdown })
+  const r = await adminUpdatePrivacyNotice(ctx.supabase, { markdown: parsed.data.markdown })
   if (!r.ok) return fromDbError(r.error)
-  await auditPlatformAction({ action: 'settings.privacy_notice', targetType: 'settings', targetId: null, details: { length: parsed.data.markdown.length } })
   revalidatePath('/privacy')
   revalidatePath('/admin/privacy')
   return success('Privacy notice saved. The public page shows it now.')
@@ -236,9 +231,8 @@ export async function setReportStatus(_prev: ActionState, form: FormData): Promi
   const ctx = await requirePlatformAdmin()
   const parsed = statusForm.safeParse(formFields(form))
   if (!parsed.success) return failure('Pick a report and a status.')
-  const r = await setAbuseReportStatus(ctx.supabase, { ...parsed.data, reviewerId: ctx.user.id })
+  const r = await adminSetAbuseReportStatus(ctx.supabase, parsed.data)
   if (!r.ok) return fromDbError(r.error)
-  await auditPlatformAction({ action: `abuse_report.${parsed.data.status}`, targetType: 'abuse_report', targetId: parsed.data.reportId })
   revalidatePath('/admin', 'layout')
   return success('Report updated.')
 }
@@ -255,7 +249,7 @@ export async function closeReportedSurvey(_prev: ActionState, form: FormData): P
   if (!parsed.success) return fromZodError(parsed.error)
   const r = await adminCloseSurvey(ctx.supabase, { surveyId: parsed.data.surveyId, reason: parsed.data.reason })
   if (!r.ok) return fromDbError(r.error)
-  await setAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, reviewerId: ctx.user.id, status: 'actioned' })
+  await adminSetAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, status: 'actioned' })
   revalidatePath('/admin', 'layout')
   return success('Survey closed and report marked actioned.')
 }
@@ -266,7 +260,7 @@ export async function archiveReportedWorkspace(_prev: ActionState, form: FormDat
   if (!parsed.success) return failure('Pick a report.')
   const r = await archiveWorkspace(ctx.supabase, { workspaceId: parsed.data.workspaceId })
   if (!r.ok) return fromDbError(r.error)
-  await setAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, reviewerId: ctx.user.id, status: 'actioned' })
+  await adminSetAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, status: 'actioned' })
   revalidatePath('/admin', 'layout')
   return success('Workspace archived and report marked actioned.')
 }

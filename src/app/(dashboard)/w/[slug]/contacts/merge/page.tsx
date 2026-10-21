@@ -3,7 +3,8 @@ import { EmptyState } from '@/components/ui'
 import { defaultSurvivor } from '@/components/crm/merge'
 import { MergeFlow } from '@/components/crm/MergeFlow'
 import { requireMember } from '@/lib/auth'
-import { countNotesAndTokens, listContactsByIds, listFieldDefs, listMembers } from '@/lib/crm/data/contacts'
+import { countNotesAndTokens, listContactsByIds, listFieldDefs } from '@/lib/db/contacts'
+import { listMembers } from '@/lib/db/workspaces'
 import { mergeAction } from '../actions'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

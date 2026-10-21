@@ -9,9 +9,12 @@ const publishSurveyVersion = vi.fn()
 const getSurvey = vi.fn()
 const getVersion = vi.fn()
 
-vi.mock('@/lib/db/surveys', () => ({ saveDraft: (...a: unknown[]) => saveDraft(...a) }))
+vi.mock('@/lib/db/surveys', () => ({
+  saveDraft: (...a: unknown[]) => saveDraft(...a),
+  getSurvey: (...a: unknown[]) => getSurvey(...a),
+  getVersion: (...a: unknown[]) => getVersion(...a),
+}))
 vi.mock('@/lib/db/publish', () => ({ publishSurveyVersion: (...a: unknown[]) => publishSurveyVersion(...a) }))
-vi.mock('../queries', () => ({ getSurvey: (...a: unknown[]) => getSurvey(...a), getVersion: (...a: unknown[]) => getVersion(...a) }))
 
 const { publishDraft } = await import('../publish')
 

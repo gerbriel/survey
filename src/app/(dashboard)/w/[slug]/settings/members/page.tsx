@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { requireMember } from '@/lib/auth'
-import { listMembers } from '@/lib/admin/db/members'
-import { listWorkspaceInvites } from '@/lib/admin/db/invites'
+import { listMembers, listMembersWithEmail, type MemberWithEmail } from '@/lib/db/workspaces'
+import { listWorkspaceInvites } from '@/lib/db/invites'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { memberCan } from '@/lib/auth/roles'
 import { MembersTable, TransferOwnershipForm, type MemberView } from '@/components/settings/MembersTable'
@@ -10,20 +10,22 @@ import { changeRole, removeMemberAction, transferOwnership } from '../actions'
 export const metadata: Metadata = { title: 'Members' }
 
 /**
- * Member list (doc 05 section 2). Emails are not shown: members cannot read
- * auth.users (foundation change request in the Phase 2A report).
+ * Member list (doc 05 section 2). Admins and the owner see sign-in emails
+ * through workspace_members_with_email; everyone else sees names only.
  */
 export default async function MembersPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const { workspace, role, supabase, user } = await requireMember(slug)
+  const isAdmin = memberCan(role, 'admin', workspace)
   const [members, invites] = await Promise.all([
-    listMembers(supabase, { workspaceId: workspace.id }),
-    memberCan(role, 'admin', workspace) ? listWorkspaceInvites(supabase, { workspaceId: workspace.id }) : null,
+    isAdmin ? listMembersWithEmail(supabase, { workspaceId: workspace.id }) : listMembers(supabase, { workspaceId: workspace.id }),
+    isAdmin ? listWorkspaceInvites(supabase, { workspaceId: workspace.id }) : null,
   ])
   const labels = new Map((invites?.ok ? invites.data : []).map((i) => [i.id, i.label]))
   const rows: MemberView[] = (members.ok ? members.data : []).map((m) => ({
     userId: m.user_id,
     name: m.display_name,
+    email: (m as Partial<MemberWithEmail>).email ?? null,
     avatarUrl: m.avatar_url,
     role: m.role,
     joined: formatDate(m.created_at),

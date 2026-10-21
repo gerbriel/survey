@@ -1,4 +1,4 @@
-import { getActiveAlias } from '@/lib/builder/queries'
+import { getActiveAlias } from '@/lib/db/surveys'
 import { loadSurveyContext } from '@/lib/builder/load'
 import { publicAssetUrl } from '@/lib/builder/share'
 import { effectiveState, stateText, requestTime } from '@/lib/builder/state'

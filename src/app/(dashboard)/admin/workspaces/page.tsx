@@ -1,9 +1,7 @@
 import type { Metadata } from 'next'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { platformStorageUsage } from '@/lib/db/admin'
-import { listAllWorkspaces, listProfiles } from '@/lib/admin/db/platform'
-import { getWorkspaceRequest } from '@/lib/admin/db/requests'
-import { listAuthUsers, workspaceCounts, type AuthUserSummary } from '@/lib/admin/service'
+import { adminWorkspaceStats, platformStorageUsage, listAllWorkspaces, listProfiles, getWorkspaceRequest } from '@/lib/db/admin'
+import { listAuthUsers, type AuthUserSummary } from '@/lib/admin/service'
 import { deletionAvailableAt, formatBytes, formatDate, lifecycleState, purgeDueAt } from '@/lib/admin/lifecycle'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { AdminWorkspaceList, type AdminWorkspaceRow } from '@/components/admin/WorkspaceList'
@@ -18,21 +16,22 @@ export default async function AdminWorkspacesPage({ searchParams }: { searchPara
   const sp = await searchParams
   const requestId = typeof sp.request === 'string' && /^[0-9a-f-]{36}$/i.test(sp.request) ? sp.request : null
 
-  const [workspaces, storage, profiles, users, request] = await Promise.all([
+  const [workspaces, counts, storage, profiles, users, request] = await Promise.all([
     listAllWorkspaces(supabase),
+    adminWorkspaceStats(supabase),
     platformStorageUsage(supabase),
     listProfiles(supabase),
     listAuthUsers(),
     requestId ? getWorkspaceRequest(supabase, { requestId }) : null,
   ])
   const list = workspaces.ok ? workspaces.data : []
-  const counts = await workspaceCounts(list.map((w) => w.id))
+  const stats = new Map((counts.ok ? counts.data : []).map((c) => [c.workspace_id, c]))
   const bytes = new Map((storage.ok ? storage.data : []).map((s) => [s.workspace_id, Number(s.bytes)]))
   const names = new Map((profiles.ok ? profiles.data : []).map((p) => [p.id, p.display_name]))
   const emails = users.ok ? users.data : new Map<string, AuthUserSummary>()
 
   const rows: AdminWorkspaceRow[] = list.map((w) => {
-    const c = counts.ok ? counts.data[w.id] : undefined
+    const c = stats.get(w.id)
     const state = lifecycleState(w)
     const delAt = deletionAvailableAt(w)
     const purgeAt = purgeDueAt(w)
@@ -40,10 +39,10 @@ export default async function AdminWorkspacesPage({ searchParams }: { searchPara
       id: w.id,
       name: w.name,
       slug: w.slug,
-      owner: c?.ownerId ? (names.get(c.ownerId) ?? 'Unknown') : 'No owner',
-      members: c?.members ?? 0,
-      surveys: c?.surveys ?? 0,
-      responses: c?.responses ?? 0,
+      owner: c?.owner_id ? (names.get(c.owner_id) ?? 'Unknown') : 'No owner',
+      members: c?.member_count ?? 0,
+      surveys: c?.survey_count ?? 0,
+      responses: c?.response_count ?? 0,
       storage: formatBytes(bytes.get(w.id) ?? w.storage_bytes_used),
       created: formatDate(w.created_at),
       state,

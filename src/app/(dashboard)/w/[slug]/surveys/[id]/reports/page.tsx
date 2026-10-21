@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { getSurvey, listReports } from '@/lib/analytics/data'
+import { getSurvey } from '@/lib/db/surveys'
+import { listReports } from '@/lib/db/reports'
 import { createReportAction } from './actions'
 
 export const metadata: Metadata = { title: 'Reports' }

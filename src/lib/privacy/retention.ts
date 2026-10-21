@@ -1,5 +1,5 @@
 import 'server-only'
-import { retentionBatch } from '@/lib/db/privacy'
+import { listRetentionWorkspaces, retentionBatch } from '@/lib/db/privacy'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { deleteQueuedObjects } from './storage'
 
@@ -25,23 +25,22 @@ export async function runRetention(opts: { deadline?: number; now?: () => number
   const now = opts.now ?? Date.now
   const deadline = opts.deadline ?? now() + RETENTION_BUDGET_MS
   const admin = createAdminClient()
-  // TODO(foundation): a wrapper for "workspaces with retention_days" belongs in src/lib/db.
-  const { data, error } = await admin.from('workspaces').select('id').not('retention_days', 'is', null).is('deleted_at', null)
-  if (error) throw new Error(`retention: could not list workspaces: ${error.message}`)
+  const ws = await listRetentionWorkspaces(admin)
+  if (!ws.ok) throw new Error(`retention: could not list workspaces: ${ws.error.message}`)
   const logs: RetentionLog[] = []
   let timedOut = false
-  for (const w of data ?? []) {
+  for (const workspaceId of ws.data) {
     if (now() > deadline) {
       timedOut = true
       break
     }
-    const log: RetentionLog = { workspace_id: w.id, rounds: 0, files_deleted: 0, files_failed: 0 }
+    const log: RetentionLog = { workspace_id: workspaceId, rounds: 0, files_deleted: 0, files_failed: 0 }
     for (let i = 0; i < MAX_ROUNDS_PER_WORKSPACE; i++) {
       if (now() > deadline) {
         timedOut = true
         break
       }
-      const batch = await retentionBatch(admin, { workspaceId: w.id, limit: RETENTION_BATCH })
+      const batch = await retentionBatch(admin, { workspaceId, limit: RETENTION_BATCH })
       log.rounds++
       if (!batch.ok) {
         log.error = batch.error.code

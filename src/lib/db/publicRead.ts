@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { Enums, Json } from '@/types/db-helpers'
-import type { AnonClient } from '@/lib/supabase/types'
+import type { AdminClient, AnonClient } from '@/lib/supabase/types'
 import { call, id } from './rpc'
 
 /**
@@ -35,6 +35,7 @@ export type PublicSurvey = {
   og_description: string | null
   og_image_path: string | null
   allow_indexing: boolean
+  workspace_id: string
   workspace_name: string
   logo_path: string | null
   show_powered_by: boolean
@@ -73,5 +74,39 @@ export function getPublicDefinition(client: AnonClient, input: z.input<typeof ge
     input,
     (v) => client.rpc('get_public_definition', { p_version_id: v.versionId, p_key: v.key }).maybeSingle(),
     (row): PublicDefinition | null => (row ? (row as PublicDefinition) : null),
+  )
+}
+
+export type OgCard = { title: string; workspaceName: string; logoPath: string | null }
+
+export const ogCardInput = z.object({ versionId: id })
+
+/** Service role (OG image route): title and workspace branding for a published version, or null. */
+export function ogCard(admin: AdminClient, input: z.input<typeof ogCardInput>) {
+  return call(
+    ogCardInput,
+    input,
+    (v) =>
+      admin
+        .from('survey_versions')
+        .select('public_definition, status, surveys!inner(title, archived_at), workspaces!inner(name, logo_path, deleted_at)')
+        .eq('id', v.versionId)
+        .eq('status', 'published')
+        .maybeSingle(),
+    (row): OgCard | null => {
+      if (!row) return null
+      const r = row as unknown as {
+        public_definition: { settings?: { title?: unknown } } | null
+        surveys: { title: string; archived_at: string | null } | null
+        workspaces: { name: string; logo_path: string | null; deleted_at: string | null } | null
+      }
+      if (!r.workspaces || r.workspaces.deleted_at || !r.surveys || r.surveys.archived_at) return null
+      const t = r.public_definition?.settings?.title
+      return {
+        title: typeof t === 'string' && t.trim() ? t : r.surveys.title,
+        workspaceName: r.workspaces.name,
+        logoPath: r.workspaces.logo_path,
+      }
+    },
   )
 }

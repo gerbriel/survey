@@ -53,3 +53,56 @@ export const empty = z.object({}).optional()
 
 /** Rows returned by erase_respondent, retention_batch, storage_sweep_batch. */
 export type StorageDeletion = { deletion_id: number; bucket: string; path: string }
+
+type Res<D> = { data: D; error: unknown }
+
+/**
+ * An UPDATE or DELETE that RLS filtered to zero rows returns no error. Turn
+ * that into permission_denied so the form says something true. Use with
+ * `.select('id')` so the changed rows come back.
+ */
+export async function affected<D extends unknown[] | null>(q: PromiseLike<Res<D>>): Promise<Res<D>> {
+  const r = await q
+  if (!r.error && (!r.data || r.data.length === 0)) {
+    return { data: r.data, error: { code: '42501', message: 'permission denied: no rows changed' } }
+  }
+  return r
+}
+
+/** Escape a user string for a PostgREST ilike pattern. */
+export function ilikePattern(s: string): string {
+  return `%${s.replace(/[\\%_,()]/g, (c) => `\\${c}`)}%`
+}
+
+/** jsonb columns that are NOT NULL; the generated type says NonNullable<Json>. */
+export function asJsonObject(value: unknown): NonNullable<Json> {
+  return value as NonNullable<Json>
+}
+
+export function chunks<T>(list: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size))
+  return out
+}
+
+/** PostgREST caps a response at max_rows (1000, supabase/config.toml). */
+export const PAGE = 1000
+
+export type PageResult<T> = PromiseLike<{ data: T[] | null; error: unknown }>
+
+/** Reads pages of PAGE rows until a short page or `max` rows. Never throws. */
+export async function readAll<T>(page: (from: number, to: number) => PageResult<T>, max = 100_000): Promise<DbResult<T[]>> {
+  const out: T[] = []
+  try {
+    for (let from = 0; from < max; from += PAGE) {
+      const { data, error } = await page(from, Math.min(from + PAGE, max) - 1)
+      if (error) return fail(toDbError(error))
+      const rows = data ?? []
+      out.push(...rows)
+      if (rows.length < PAGE) break
+    }
+    return ok(out)
+  } catch (e) {
+    return fail(toDbError(e))
+  }
+}

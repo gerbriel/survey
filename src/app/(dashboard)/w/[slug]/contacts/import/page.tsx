@@ -1,9 +1,11 @@
 import Link from 'next/link'
 import { ImportWizard } from '@/components/crm/ImportWizard'
 import { requireMember } from '@/lib/auth'
-import { listFieldDefs, listMembers, listSurveysLite } from '@/lib/crm/data/contacts'
+import { listFieldDefs } from '@/lib/db/contacts'
+import { listMembers } from '@/lib/db/workspaces'
+import { listSurveysLite } from '@/lib/db/surveys'
 import type { ImportRow } from '@/lib/crm/import'
-import { generateLinksAction, importChunkAction, startImportAction } from '../actions'
+import { finishImportAction, generateLinksAction, importChunkAction, startImportAction } from '../actions'
 
 export default async function ImportPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
@@ -32,6 +34,7 @@ export default async function ImportPage({ params }: { params: Promise<{ slug: s
           'use server'
           return importChunkAction(slug, importId, rows)
         }}
+        finish={finishImportAction.bind(null, slug)}
         generateLinks={async (emails: string[], surveyId: string, maxResponses: number) => {
           'use server'
           return generateLinksAction(slug, { surveyId, emails, maxResponses })

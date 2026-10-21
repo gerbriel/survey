@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { findRespondents, parseLookup, reviewRespondent } from '@/lib/privacy/lookup'
+import { findRespondents, reviewRespondent } from '@/lib/db/privacy'
+import { parseLookup } from '@/lib/privacy/lookup'
 import { retentionStatus } from '@/lib/privacy/status'
 import { eraseAction } from './actions'
 import { EraseForm } from './EraseForm'
@@ -27,8 +28,8 @@ export default async function PrivacyToolsPage({ params, searchParams }: Props) 
   const raw = typeof sp.q === 'string' ? sp.q.slice(0, 500) : ''
   const query = raw ? parseLookup(raw) : null
   const isAdmin = roleAtLeast(m.role, 'admin') && !m.readOnly
-  const matches = query ? await findRespondents(m.supabase, m.workspace.id, query) : null
-  const reviews = matches?.ok ? await Promise.all(matches.data.map((c) => reviewRespondent(m.supabase, c))) : []
+  const matches = query ? await findRespondents(m.supabase, { workspaceId: m.workspace.id, query }) : null
+  const reviews = matches?.ok ? await Promise.all(matches.data.map((c) => reviewRespondent(m.supabase, { contact: c }))) : []
   const retention = await retentionStatus(m.supabase, m.workspace)
 
   return (

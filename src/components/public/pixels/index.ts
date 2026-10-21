@@ -2,6 +2,7 @@
 export { Pixels } from './Pixels'
 export { firePixelEvent, setTrackingConsent, PIXEL_FLUSH_MS } from './track'
 export {
+  allowScriptAttrs,
   consentStorageKey,
   initialConsent,
   parseCustomScript,

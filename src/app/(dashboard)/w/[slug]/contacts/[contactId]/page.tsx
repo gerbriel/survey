@@ -11,17 +11,18 @@ import { Timeline } from '@/components/crm/Timeline'
 import { buildTimeline } from '@/components/crm/timelineData'
 import { memberName } from '@/components/crm/types'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { contactDuplicateCandidates } from '@/lib/db/contacts'
 import {
+  contactDuplicateCandidates,
   getContact,
   listContactActivity,
   listContactsByIds,
   listFieldDefs,
-  listMembers,
   listNotes,
   listWorkspaceTags,
-} from '@/lib/crm/data/contacts'
-import { getVersionDefinitions, listAnswersFor, listContactResponses } from '@/lib/crm/data/responses'
+} from '@/lib/db/contacts'
+import { listMembers } from '@/lib/db/workspaces'
+import { getVersionDefinitions } from '@/lib/db/surveys'
+import { listAnswersFor, listContactResponses } from '@/lib/db/responses'
 import {
   addNoteAction,
   deleteNoteAction,

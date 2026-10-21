@@ -26,10 +26,16 @@ export function aliasProblem(alias: string, reserved: readonly string[]): string
   return null
 }
 
-/** Mirrors reserved_public_segments() in migration 0005. */
+/**
+ * Mirrors reserved_public_segments() as last defined (migration 0018, which
+ * added 'welcome'). Pinned by src/lib/builder/__tests__/reserved.test.ts.
+ */
 export const RESERVED_ALIASES = [
-  'w', 'admin', 'login', 'pending', 'invite', 'auth', 'dev',
-  'api', 's', 'r', 'f', 'e', 'logout', 'app', 'www', 'static', 'well-known', 'join', 'privacy',
+  // DASHBOARD_SEGMENTS (src/lib/hosts.ts)
+  'w', 'admin', 'login', 'pending', 'invite', 'auth', 'dev', 'welcome', 'join',
+  // docs/01 section 3
+  'api', 's', 'r', 'f', 'e', 'logout', 'app', 'www', 'static', 'well-known', 'privacy',
+  // docs/02 section 2 (public host routes and files)
   'report', 'robots', 'favicon',
 ] as const
 

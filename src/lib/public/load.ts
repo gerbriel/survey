@@ -6,7 +6,6 @@ import { getEffectiveLimits, GLOBAL_LIMIT_DEFAULTS, type EffectiveLimits } from 
 import { createAnonClient } from '@/lib/supabase/anon'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { Json } from '@/types/db-helpers'
-import { surveyWorkspace } from './db'
 
 /**
  * The public read path (doc 02 section 4, R1): resolve_public_survey per
@@ -85,26 +84,24 @@ export const loadPublicSurvey = cache(async (key: string): Promise<LoadedSurvey>
 export type SurveyContext = { workspaceId: string; limits: EffectiveLimits }
 
 /**
- * Workspace id and effective limits for a survey. Cached five minutes: limit
+ * Effective limits for a survey's workspace. resolve_public_survey returns
+ * workspace_id, so only the limits are read here. Cached five minutes: limit
  * overrides are rare and only a platform admin changes them. Null when the
- * service role is not configured or the survey is gone.
+ * service role is not configured or the read fails.
  */
-const cachedContext = unstable_cache(
-  async (surveyId: string): Promise<SurveyContext | null> => {
-    const admin = createAdminClient()
-    const s = await surveyWorkspace(admin, { surveyId })
-    if (!s.ok) throw new Error(`survey lookup failed: ${s.error.code}`)
-    if (!s.data) return null
-    const l = await getEffectiveLimits(admin, { workspaceId: s.data.workspace_id })
-    return { workspaceId: s.data.workspace_id, limits: l.ok && l.data ? l.data : { ...GLOBAL_LIMIT_DEFAULTS } }
+const cachedLimits = unstable_cache(
+  async (workspaceId: string): Promise<EffectiveLimits> => {
+    const l = await getEffectiveLimits(createAdminClient(), { workspaceId })
+    if (!l.ok) throw new Error(`effective limits failed: ${l.error.code}`)
+    return l.data ?? { ...GLOBAL_LIMIT_DEFAULTS }
   },
-  ['public-survey-context-v1'],
+  ['public-workspace-limits-v1'],
   { revalidate: 300 },
 )
 
-export async function surveyContext(surveyId: string): Promise<SurveyContext | null> {
+export async function surveyContext(survey: Pick<PublicSurvey, 'workspace_id'>): Promise<SurveyContext | null> {
   try {
-    return await cachedContext(surveyId)
+    return { workspaceId: survey.workspace_id, limits: await cachedLimits(survey.workspace_id) }
   } catch (e) {
     console.error('[public]', (e as Error).message)
     return null

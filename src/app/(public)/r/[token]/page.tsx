@@ -8,9 +8,10 @@ import { loadSharedReport, shareCookieName, shareCookieSecret, shareGate, unseal
 import { unlockSharedReport } from './actions'
 
 /**
- * Public read-only report (doc 04 section 5.4, R15) on PUBLIC_HOST. All
- * checks happen in shared_report_payload through src/lib/analytics/share.ts;
- * unknown, revoked and expired tokens get the same 404. Aggregates only, no
+ * Public read-only report (doc 04 section 5.4, R15) on PUBLIC_HOST. Every
+ * load calls report_share_gate (which also counts the view), then
+ * shared_report_payload, through src/lib/analytics/share.ts; unknown, revoked
+ * and expired tokens get the same 404. Aggregates only, no
  * pixels, no member session, noindex and no referrer.
  */
 export const metadata: Metadata = {
@@ -26,19 +27,15 @@ type Props = {
 
 export default async function SharedReportPage({ params, searchParams }: Props) {
   const { token } = await params
-  const gate = await shareGate(token)
+  const sealed = (await cookies()).get(shareCookieName(token))?.value
+  const password = sealed ? unsealPassword(sealed, token, shareCookieSecret()) : null
+  const gate = await shareGate(token, password)
   if (gate === 'not_found') notFound()
-  let password: string | null = null
   if (gate === 'needs_password') {
-    const sealed = (await cookies()).get(shareCookieName(token))?.value
-    password = sealed ? unsealPassword(sealed, token, shareCookieSecret()) : null
-    if (!password) return <PasswordPrompt token={token} error={(await searchParams).e} />
+    return <PasswordPrompt token={token} error={password ? 'wrong' : (await searchParams).e} />
   }
   const payload = await loadSharedReport(token, password)
-  if (!payload) {
-    if (gate === 'needs_password') return <PasswordPrompt token={token} error="wrong" />
-    notFound()
-  }
+  if (!payload) notFound()
   return (
     <main className="mx-auto max-w-5xl p-4 md:p-8">
       <SharedReportView payload={payload} />

@@ -46,6 +46,30 @@ describe('shared report payload allow-list', () => {
       { option_id: 'opt_b', count: null, suppressed: true },
     ])
   })
+  it('keeps matrix row and column labels at widget level only', () => {
+    const safe = sanitizeSharedPayload({
+      ...RAW,
+      widgets: [
+        {
+          id: 'w2',
+          position: 1,
+          chart_type: 'heat_table',
+          question_key: 'q_bbbbbbbb',
+          metric: null,
+          label: 'Rate',
+          options: null,
+          rows: [{ id: 'r1', label: 'Speed', weight: 2 }],
+          columns: [{ id: 'c1', label: 'Good' }],
+          result: { n: 4, data: [{ row_id: 'r1', column_id: 'c1', count: 4 }], rows: [{ id: 'resp', raw: 'secret' }] },
+        },
+      ],
+    })!
+    expect(safe.widgets[0]!.rows).toEqual([{ id: 'r1', label: 'Speed' }])
+    expect(safe.widgets[0]!.columns).toEqual([{ id: 'c1', label: 'Good' }])
+    expect(safe.widgets[0]!.result).not.toHaveProperty('rows')
+    expect(JSON.stringify(safe)).not.toContain('secret')
+    expect(JSON.stringify(safe)).not.toContain('resp')
+  })
   it('null for junk', () => {
     expect(sanitizeSharedPayload(null)).toBeNull()
     expect(sanitizeSharedPayload('x')).toBeNull()

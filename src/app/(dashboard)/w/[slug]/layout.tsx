@@ -1,10 +1,7 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
-import { requireMember, requireUser } from '@/lib/auth'
-import { getWorkspaceById, getWorkspaceBySlug, listMemberships } from '@/lib/db/workspaces'
+import { requireMember } from '@/lib/auth'
+import { listMemberships } from '@/lib/db/workspaces'
 import { setLastWorkspace } from '@/lib/db/profiles'
-import { getSlugHistory } from '@/lib/admin/db/workspace'
-import { slugRedirectActive } from '@/lib/admin/lifecycle'
 import { Nav } from '@/components/dashboard/Nav'
 import { RoleBadge } from '@/components/dashboard/RoleBadge'
 import { SignOutButton } from '@/components/dashboard/SignOutButton'
@@ -32,19 +29,8 @@ export default async function WorkspaceLayout({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
-  const ctx = await requireUser({ next: `/w/${slug}` })
-
-  // Renamed workspace: the old slug redirects for 30 days (doc 05 section 1.2).
-  const live = await getWorkspaceBySlug(ctx.supabase, { slug })
-  if (live.ok && !live.data) {
-    const hist = await getSlugHistory(ctx.supabase, { slug })
-    if (hist.ok && hist.data?.workspace_id && slugRedirectActive(hist.data.released_at)) {
-      const ws = await getWorkspaceById(ctx.supabase, { workspaceId: hist.data.workspace_id })
-      if (ws.ok && ws.data && !ws.data.deleted_at) redirect(`/w/${encodeURIComponent(ws.data.slug)}`)
-    }
-    notFound()
-  }
-
+  // A renamed workspace's old slug redirects for 30 days (doc 05 section 1.2);
+  // requireMember does that for this layout and for every page below it.
   const { workspace, role, profile, supabase, user } = await requireMember(slug, 'viewer')
 
   // Where `/` lands next time. Written only when it changes.

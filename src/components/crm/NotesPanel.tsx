@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import { Button } from '@/components/ui'
 import { cx, focusRing } from '@/components/ui'
-import type { ContactNote } from '@/lib/crm/data/contacts'
+import type { ContactNote } from '@/lib/db/contacts'
 import { memberName, type ActionResult, type MemberLite } from './types'
 
 function stamp(iso: string) {

@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { requirePlatformAdmin } from '@/lib/auth'
 import { getEffectiveLimits } from '@/lib/db/limits'
-import { getAnyWorkspace, getWorkspaceLimitsRow } from '@/lib/admin/db/platform'
+import { getWorkspaceById } from '@/lib/db/workspaces'
+import { getWorkspaceLimitsRow } from '@/lib/db/admin'
 import { workspaceMembersForAdmin } from '@/lib/admin/service'
 import {
   canRequestDeletion,
@@ -58,7 +59,7 @@ export default async function AdminWorkspacePage({
   const { id } = await params
   const sp = await searchParams
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound()
-  const ws = await getAnyWorkspace(supabase, { workspaceId: id })
+  const ws = await getWorkspaceById(supabase, { workspaceId: id })
   if (!ws.ok || !ws.data) notFound()
   const w = ws.data
   const [limitsRow, effective, members] = await Promise.all([

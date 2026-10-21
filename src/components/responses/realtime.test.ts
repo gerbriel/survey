@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { InboxRow } from '@/lib/crm/data/responses'
+import type { InboxRow } from '@/lib/db/responses'
 import { createRealtimeHandler, rowMatches } from './realtime'
 
 const ROW: InboxRow = {

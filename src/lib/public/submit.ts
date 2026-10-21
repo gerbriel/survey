@@ -11,11 +11,10 @@ import {
   type FileRef,
   type SurveyDefinition,
 } from '@/lib/survey'
-import { submitResponse, type SubmitPayload, type SubmitResult } from '@/lib/db/submission'
+import { submitResponse, type SubmitPayload, type SubmitResult, publishedVersion } from '@/lib/db/submission'
 import type { PublicSurvey } from '@/lib/db/publicRead'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { fileIdsFromAnswers, type SubmitResponse } from '@/components/public/protocol'
-import { publishedVersion } from './db'
 import { clientIp, json, readJsonBody } from './http'
 import { resolveSurvey, surveyContext } from './load'
 import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret, type RateCheck } from './ratelimit'
@@ -183,7 +182,7 @@ export async function handleSubmit(req: Request): Promise<Response> {
   const admin = createAdminClient()
   const ip = clientIp(req.headers)
   const ipKey = hashIp(ip, rateLimitSecret())
-  const ctx = await surveyContext(body.surveyId)
+  const ctx = await surveyContext(survey)
   const checks: RateCheck[] = [{ rule: RATE_LIMITS.submitSurvey, key: body.surveyId }]
   if (!body.resumeToken) checks.push({ rule: RATE_LIMITS.submitCreate, key: ipKey })
   if (body.action === 'save') checks.push({ rule: RATE_LIMITS.submitSave, key: ipKey })

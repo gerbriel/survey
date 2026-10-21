@@ -11,18 +11,17 @@ import {
   requestWorkspaceDeletion,
   transferWorkspaceOwnership,
   unarchiveWorkspace,
-} from '@/lib/db/workspaces'
-import { workspaceSlug } from '@/lib/db/rpc'
-import { changeMemberRole, removeMember } from '@/lib/admin/db/members'
-import { createInviteInput, createWorkspaceInvite, revokeWorkspaceInvite } from '@/lib/admin/db/invites'
-import { createPixel, deletePixel, updatePixel } from '@/lib/admin/db/pixels'
-import {
+  changeMemberRole,
+  removeMember,
   removeLogoObject,
   setWorkspaceLogoPath,
   updatePrivacyInput,
   updateWorkspaceGeneral,
   updateWorkspacePrivacy,
-} from '@/lib/admin/db/workspace'
+  workspaceSlug,
+} from '@/lib/db/workspaces'
+import { createInviteInput, createWorkspaceInvite, revokeWorkspaceInvite } from '@/lib/db/invites'
+import { createPixel, deletePixel, updatePixel } from '@/lib/db/pixels'
 import {
   failure,
   formBool,

@@ -2,7 +2,7 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { cache } from 'react'
 import { requireMember, memberCan, type MemberContext } from '@/lib/auth'
-import { getSurvey, type SurveyRow } from './queries'
+import { getSurvey, type SurveyRow } from '@/lib/db/surveys'
 
 /**
  * Member plus survey for the /w/[slug]/surveys/[id] pages. 404 when the

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { analyze, orderedQuestions, widgetCrossTab } from '../analyze'
 import { crossTab } from '../crosstab'
 import { DEFAULT_FILTERS, filtersFromReport, filtersToQuery, hasNonEventFilter, parseFilters, reportFiltersFrom, toResponseFilters } from '../filters'
-import { md5Crypt, hashSharePassword } from '../password'
 import { formatCount, suppressCount } from '../suppress'
 import { compareQuestion, compareVersions } from '../versions'
 import { chartsForType, defaultWidgets } from '../widgets'
@@ -116,19 +115,5 @@ describe('default report', () => {
     expect(w.map((x) => x.chart_type)).toEqual(['stat', 'line', 'bar', 'nps_gauge'])
     expect(w.map((x) => x.position)).toEqual([0, 1, 2, 3])
     expect(chartsForType('matrix')[0]).toBe('heat_table')
-  })
-})
-
-describe('share password hashing', () => {
-  it('matches openssl passwd -1 (pgcrypto crypt verifies the same format)', () => {
-    expect(md5Crypt('correct horse', 'saltsalt')).toBe('$1$saltsalt$NuzA7WTAelpl95xgBGWN60')
-    expect(md5Crypt('pässword', 'ab')).toBe('$1$ab$zSxXTAOa3MsUL6fbBrrN71')
-  })
-  it('random salt', () => {
-    const a = hashSharePassword('secret12')
-    expect(a).toMatch(/^\$1\$[./0-9A-Za-z]{8}\$[./0-9A-Za-z]{22}$/)
-    expect(hashSharePassword('secret12')).not.toBe(a)
-    const salt = a.split('$')[2]!
-    expect(md5Crypt('secret12', salt)).toBe(a)
   })
 })

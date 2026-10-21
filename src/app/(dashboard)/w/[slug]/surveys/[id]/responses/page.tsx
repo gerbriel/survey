@@ -4,7 +4,8 @@ import { LinkButton } from '@/components/crm/LinkButton'
 import { InboxFilters } from '@/components/responses/InboxFilters'
 import { InboxList } from '@/components/responses/InboxList'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { getSurvey, listInbox, listVersions } from '@/lib/crm/data/responses'
+import { getSurvey, listPublishedVersions } from '@/lib/db/surveys'
+import { listInbox } from '@/lib/db/responses'
 import { fetchInboxRowAction } from './actions'
 
 type SP = Record<string, string | string[] | undefined>
@@ -30,7 +31,7 @@ export default async function ResponsesPage({
   const { supabase, role } = await requireMember(slug, 'viewer')
   const survey = await getSurvey(supabase, { surveyId: id })
   if (!survey.ok || !survey.data) notFound()
-  const versions = await listVersions(supabase, { surveyId: id })
+  const versions = await listPublishedVersions(supabase, { surveyId: id, order: 'desc' })
   const versionList = versions.ok ? versions.data : []
 
   const status = one(sp.status) === 'all' ? 'all' : 'complete'

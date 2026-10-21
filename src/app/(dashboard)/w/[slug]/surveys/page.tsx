@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { requireMember, memberCan } from '@/lib/auth'
-import { listSurveys } from '@/lib/builder/queries'
+import { listSurveys } from '@/lib/db/surveys'
 import { effectiveState, stateText, requestTime } from '@/lib/builder/state'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { SurveyList, type SurveyListRow } from '@/components/builder/SurveyList'

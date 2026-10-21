@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { FieldRegistryEditor } from '@/components/crm/FieldRegistryEditor'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { listFieldDefs } from '@/lib/crm/data/contacts'
+import { listFieldDefs } from '@/lib/db/contacts'
 import { createFieldDefAction, updateFieldDefAction } from '../actions'
 
 export default async function FieldsPage({ params }: { params: Promise<{ slug: string }> }) {

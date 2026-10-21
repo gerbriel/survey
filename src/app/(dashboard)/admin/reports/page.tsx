@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { ABUSE_STATUSES, listAbuseReports, listAllWorkspaces } from '@/lib/admin/db/platform'
+import { ABUSE_STATUSES, listAbuseReports, listAllWorkspaces } from '@/lib/db/admin'
 import { formatDateTime } from '@/lib/admin/lifecycle'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'

@@ -7,12 +7,11 @@ import {
   type LintOptions,
   type SurveyDefinition,
 } from '@/lib/survey'
-import { saveDraft } from '@/lib/db/surveys'
+import { saveDraft, getSurvey, getVersion } from '@/lib/db/surveys'
 import { publishSurveyVersion } from '@/lib/db/publish'
 import { fail, makeDbError, ok, type DbResult } from '@/lib/db/errors'
 import type { UserClient } from '@/lib/supabase/types'
 import { loadDefinition } from './defaults'
-import { getSurvey, getVersion } from './queries'
 import type { PublishOutcome } from './types'
 
 /**

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { listPlatformInvites, listProfiles } from '@/lib/admin/db/platform'
+import { listPlatformInvites, listProfiles } from '@/lib/db/admin'
 import { listAuthUsers, type AuthUserSummary } from '@/lib/admin/service'
 import { formatDate, inviteStatus } from '@/lib/admin/lifecycle'
 import { inviteUrl } from '@/lib/admin/links'

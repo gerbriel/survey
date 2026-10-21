@@ -1,8 +1,7 @@
 import Link from 'next/link'
 import { DuplicatePairs, type Pair } from '@/components/crm/DuplicatePairs'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { contactDuplicateCandidates } from '@/lib/db/contacts'
-import { listContactsByIds, type Contact } from '@/lib/crm/data/contacts'
+import { contactDuplicateCandidates, listContactsByIds, type Contact } from '@/lib/db/contacts'
 import { chunk } from '@/lib/crm/import'
 import { dismissDuplicateAction } from '../actions'
 

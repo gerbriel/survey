@@ -11,7 +11,13 @@ export type HostKind = 'public' | 'dashboard' | 'unknown'
 /** One row of resolve_public_survey.pixels. */
 export type PixelRow = { id: string; type: string; value: string; parsed?: unknown }
 
-export type CustomScriptPart = { kind: 'script'; src?: string; inline?: string; async?: boolean; defer?: boolean }
+/**
+ * One part of a custom_script pixel as rendered. `attrs` holds only allow
+ * listed attributes (async, defer, type, id, data-*); src is its own field.
+ */
+export type CustomScriptPart =
+  | { kind: 'script'; src: string | null; code: string | null; attrs: Record<string, string | true> }
+  | { kind: 'noscript'; html: string }
 
 export type ResolvedPixel =
   | { id: string; type: 'ga4'; value: string }
@@ -25,35 +31,68 @@ const VALUE_RE = {
   gtm: /^GTM-[A-Z0-9]{4,10}$/,
 } as const
 
+const SCRIPT_TYPES = new Set(['text/javascript', 'application/javascript', 'module'])
+const DATA_ATTR = /^data-[a-z0-9][a-z0-9._:-]{0,63}$/
+const MAX_CODE = 10_000
+
 /**
- * custom_script parsed form. Decision: Phase 2A's pixel editor stores
- * `{ parts: [{ kind: 'script', src?, inline?, async?, defer? } | { kind: 'noscript', html }] }`
- * (a bare array is accepted too). Only https src scripts and inline bodies up
- * to 10,000 chars are kept; noscript parts are skipped because they only
- * matter when scripts are off, and raw HTML is never injected.
+ * Allow list for script attributes: async, defer, type (JavaScript types
+ * only), id, and data-*. Event handlers (on*), nonce, src (a field of its
+ * own) and every other attribute are dropped. Values are strings up to 500
+ * characters, or true for a bare attribute.
  */
-export function parseCustomScript(parsed: unknown): CustomScriptPart[] {
-  const list = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' ? (parsed as { parts?: unknown }).parts : null
-  if (!Array.isArray(list)) return []
-  const out: CustomScriptPart[] = []
-  for (const p of list.slice(0, 20)) {
-    if (!p || typeof p !== 'object') continue
-    const part = p as Record<string, unknown>
-    if (part.kind !== 'script') continue
-    const src = typeof part.src === 'string' ? part.src : undefined
-    const inline = typeof part.inline === 'string' ? part.inline : undefined
-    if (src) {
-      try {
-        if (new URL(src).protocol !== 'https:') continue
-      } catch {
-        continue
-      }
-      out.push({ kind: 'script', src, async: part.async === true, defer: part.defer === true })
-    } else if (inline && inline.trim() && inline.length <= 10_000) {
-      out.push({ kind: 'script', inline })
+export function allowScriptAttrs(raw: unknown): Record<string, string | true> {
+  const out: Record<string, string | true> = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const name = key.toLowerCase()
+    if (value !== true && (typeof value !== 'string' || value.length > 500)) continue
+    if (name === 'async' || name === 'defer') {
+      out[name] = true
+    } else if (name === 'type') {
+      if (typeof value === 'string' && SCRIPT_TYPES.has(value.toLowerCase())) out.type = value.toLowerCase()
+    } else if (name === 'id') {
+      if (typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_:.-]{0,99}$/.test(value)) out.id = value
+    } else if (DATA_ATTR.test(name)) {
+      out[name] = value
     }
   }
   return out
+}
+
+/**
+ * Reads workspace_pixels.parsed as the settings page stores it (Phase 2A):
+ * `{ version: 1, parts: [{ kind: 'script', src, code, attrs } | { kind: 'noscript', html }] }`
+ * in source order. A script keeps an https src or a non-empty inline `code`
+ * up to 10,000 characters, never both; attrs go through allowScriptAttrs.
+ * noscript parts keep their HTML for rendering inside <noscript> only.
+ */
+export function parseCustomScript(parsed: unknown): CustomScriptPart[] {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+  const doc = parsed as { version?: unknown; parts?: unknown }
+  if (doc.version !== 1 || !Array.isArray(doc.parts)) return []
+  const out: CustomScriptPart[] = []
+  for (const p of doc.parts.slice(0, 20)) {
+    if (!p || typeof p !== 'object') continue
+    const part = p as Record<string, unknown>
+    if (part.kind === 'noscript') {
+      if (typeof part.html === 'string' && part.html.trim() && part.html.length <= MAX_CODE) out.push({ kind: 'noscript', html: part.html })
+      continue
+    }
+    if (part.kind !== 'script') continue
+    const attrs = allowScriptAttrs(part.attrs)
+    if (typeof part.src === 'string' && part.src) {
+      try {
+        if (new URL(part.src).protocol !== 'https:') continue
+      } catch {
+        continue
+      }
+      out.push({ kind: 'script', src: part.src, code: null, attrs })
+    } else if (typeof part.code === 'string' && part.code.trim() && part.code.length <= MAX_CODE) {
+      out.push({ kind: 'script', src: null, code: part.code, attrs })
+    }
+  }
+  return out.some((x) => x.kind === 'script') ? out : []
 }
 
 /**

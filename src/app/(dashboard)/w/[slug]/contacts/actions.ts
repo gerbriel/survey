@@ -2,9 +2,11 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireMember } from '@/lib/auth'
-import { importContactsChunk, mergeContacts, setContactCustom } from '@/lib/db/contacts'
-import type { ContactFilters } from '@/lib/db/contacts'
 import {
+  finishImport,
+  importContactsChunk,
+  mergeContacts,
+  setContactCustom,
   addNote,
   createContact,
   createContactView,
@@ -20,13 +22,13 @@ import {
   type Contact,
   type ContactPatch,
   type ContactNote,
-} from '@/lib/crm/data/contacts'
+} from '@/lib/db/contacts'
+import type { ContactFilters, ImportChunkResult } from '@/lib/db/contacts'
 import { normalizeEmail, normalizeTag } from '@/lib/crm/email'
 import { prepareImportRows, type ImportOptions } from '@/lib/crm/importServer'
 import { generateLinks } from '@/lib/crm/tokens'
 import { normalizePhone } from '@/lib/crm/phone'
 import type { Mapping, ImportRow } from '@/lib/crm/import'
-import type { ImportChunkResult } from '@/lib/db/contacts'
 
 /**
  * Contact mutations. Each action runs requireMember for UX; RLS and the SQL
@@ -255,6 +257,19 @@ export async function importChunkAction(
   if (!r.ok) return fail(r.error.message)
   revalidatePath(base(slug))
   return { ok: true, data: { ...r.data, contactEmails: prepared.rows.map((x) => x.email) } }
+}
+
+/** Closes the import job with the wizard's final counts (finish_import). */
+export async function finishImportAction(
+  slug: string,
+  importId: string,
+  summary: { created: number; updated: number; skipped: number; invalid: number },
+): Promise<ActionResult> {
+  const { supabase } = await requireMember(slug, 'editor')
+  const r = await finishImport(supabase, { importId, summary: { status: 'done', ...summary } })
+  if (!r.ok) return fail(r.error.message)
+  revalidatePath(base(slug))
+  return { ok: true, data: undefined }
 }
 
 export async function generateLinksAction(

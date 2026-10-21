@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('server-only', () => ({}))
 const remove = vi.fn()
 const complete = vi.fn()
-vi.mock('@/lib/db/exports', () => ({ completeStorageDeletions: (...a: unknown[]) => complete(...a) }))
+vi.mock('@/lib/db/exports', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/db/exports')>()),
+  completeStorageDeletions: (...a: unknown[]) => complete(...a),
+}))
 
 const { confirmMatches, confirmPhrase } = await import('../erase')
 const { parseLookup } = await import('../lookup')

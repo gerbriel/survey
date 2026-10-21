@@ -1,14 +1,7 @@
 import 'server-only'
 import type { UserClient } from '@/lib/supabase/types'
-import {
-  insertTokens,
-  listContactsByEmails,
-  listContactsByIds,
-  listSurveysLite,
-  listTokens,
-  setTokenMaxResponses,
-  type Contact,
-} from './data/contacts'
+import { insertTokens, listContactsByEmails, listContactsByIds, listTokens, setTokenMaxResponses, type Contact } from '@/lib/db/contacts'
+import { listSurveysLite } from '@/lib/db/surveys'
 import { chunk } from './import'
 import { linksCsv, publicSurveyLink, type LinkRow } from './links'
 

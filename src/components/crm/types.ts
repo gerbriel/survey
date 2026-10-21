@@ -1,4 +1,5 @@
-import type { Contact, FieldDef, MemberLite } from '@/lib/crm/data/contacts'
+import type { Contact, FieldDef } from '@/lib/db/contacts'
+import type { MemberLite } from '@/lib/db/workspaces'
 
 export type { Contact, FieldDef, MemberLite }
 

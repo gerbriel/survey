@@ -15,8 +15,9 @@ import { DeleteResponseButton } from '@/components/responses/DeleteResponseButto
 import { formatDateTime } from '@/components/responses/format'
 import { MarkSeen } from '@/components/responses/MarkSeen'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { getContact } from '@/lib/crm/data/contacts'
-import { getResponse, getSurvey, getVersionDefinitions, listAnswers } from '@/lib/crm/data/responses'
+import { getContact } from '@/lib/db/contacts'
+import { getResponse, listAnswers } from '@/lib/db/responses'
+import { getSurvey, getVersionDefinitions } from '@/lib/db/surveys'
 import { deleteResponseAction } from '../actions'
 
 function Pairs({ title, items }: { title: string; items: [string, string][] }) {

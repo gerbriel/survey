@@ -4,12 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { requireUser } from '@/lib/auth'
 import { claimPendingInvite } from '@/lib/db/invites'
-import {
-  createAccessRequest,
-  createAccessRequestInput,
-  createWorkspaceRequest,
-  createWorkspaceRequestInput,
-} from '@/lib/admin/db/requests'
+import { createAccessRequest, createAccessRequestInput, createWorkspaceRequest, createWorkspaceRequestInput } from '@/lib/db/admin'
 import { failure, formFields, fromDbError, fromZodError, success, type ActionState } from '@/lib/admin/forms'
 
 /** Onboarding actions: /pending (access requests) and the no-workspace welcome at / (workspace requests). */

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { requireMember } from '@/lib/auth'
 import { getEffectiveLimits } from '@/lib/db/limits'
-import { getWorkspaceLimitsRow } from '@/lib/admin/db/platform'
+import { getWorkspaceLimitsRow } from '@/lib/db/admin'
 import { formatBytes, formatDateTime } from '@/lib/admin/lifecycle'
 import { LimitsTable } from '@/components/settings/LimitsTable'
 import { limitRows } from '@/components/settings/limits-view'

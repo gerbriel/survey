@@ -13,6 +13,10 @@ const appPatterns = [
       'The service-role client is never imported under src/app. Call a server-only module in src/lib that uses it (AGENTS.md "Data access").',
   },
   {
+    group: ['@/lib/db/rpc', '**/lib/db/rpc'],
+    message: 'src/app never imports the wrapper plumbing. Call a wrapper in src/lib/db (AGENTS.md "Data access").',
+  },
+  {
     group: ['@supabase/supabase-js', '@supabase/ssr'],
     allowTypeImports: true,
     message: 'Use the clients in src/lib/supabase and the wrappers in src/lib/db, never the Supabase libraries directly.',

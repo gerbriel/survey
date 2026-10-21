@@ -4,8 +4,9 @@ import { ContactsToolbar, type ViewLink } from '@/components/crm/ContactsToolbar
 import { BOARD_LIMIT, KanbanBoard } from '@/components/crm/KanbanBoard'
 import { LinkButton } from '@/components/crm/LinkButton'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { searchContacts, type Contact } from '@/lib/db/contacts'
-import { listContactViews, listFieldDefs, listMembers, listSurveysLite, listWorkspaceTags } from '@/lib/crm/data/contacts'
+import { searchContacts, type Contact, listContactViews, listFieldDefs, listWorkspaceTags } from '@/lib/db/contacts'
+import { listMembers } from '@/lib/db/workspaces'
+import { listSurveysLite } from '@/lib/db/surveys'
 import {
   decodeCursor,
   encodeCursor,

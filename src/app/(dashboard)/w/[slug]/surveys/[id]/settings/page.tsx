@@ -1,4 +1,5 @@
-import { getVersion, listPixels } from '@/lib/builder/queries'
+import { getVersion } from '@/lib/db/surveys'
+import { listPixelSummaries } from '@/lib/db/pixels'
 import { loadSurveyContext } from '@/lib/builder/load'
 import { loadDefinition } from '@/lib/builder/defaults'
 import { stateText, requestTime } from '@/lib/builder/state'
@@ -7,7 +8,7 @@ import { SettingsForm } from '@/components/builder/SettingsForm'
 export default async function SurveySettingsPage({ params }: { params: Promise<{ slug: string; id: string }> }) {
   const { slug, id } = await params
   const { member, survey, canEdit, base } = await loadSurveyContext(slug, id)
-  const pixels = await listPixels(member.supabase, { workspaceId: member.workspace.id })
+  const pixels = await listPixelSummaries(member.supabase, { workspaceId: member.workspace.id })
   let identityText = 'No identity question. Responses are not matched to contacts by email.'
   if (survey.current_draft_version_id) {
     const v = await getVersion(member.supabase, { versionId: survey.current_draft_version_id })

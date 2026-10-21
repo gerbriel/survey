@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { requireMember } from '@/lib/auth'
 import { memberCan } from '@/lib/auth/roles'
-import { logoPublicUrl } from '@/lib/admin/db/workspace'
+import { logoPublicUrl } from '@/lib/db/workspaces'
 import { canRequestDeletion, deletionAvailableAt, formatDate } from '@/lib/admin/lifecycle'
 import { GeneralForm } from '@/components/settings/GeneralForm'
 import { LifecycleCard } from '@/components/settings/LifecycleCard'

@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { requireMember, roleAtLeast } from '@/lib/auth'
-import { createExportJob, getExportJob, getSurvey } from '@/lib/analytics/data'
+import { createExportJob, getExportJob } from '@/lib/db/exports'
+import { getSurvey } from '@/lib/db/surveys'
 import { parseFilters, toResponseFilters } from '@/lib/analytics/filters'
 import { loadAnalytics, loadSnapshots } from '@/lib/analytics/load'
-import { countFilteredResponses } from '@/lib/analytics/data'
+import { countFilteredResponses } from '@/lib/db/responses'
 import { BOM, csvLine, toCsv } from '@/lib/exports/csv'
 import { collectRows, csvStream, DIRECT_LIMIT, finishJob, JOB_BUDGET_MS, logExport, planExport, signedJobUrl } from '@/lib/exports/jobs'
 import { SUMMARY_HEADER, summaryRows } from '@/lib/exports/summary'
@@ -76,7 +77,7 @@ async function runExport(slug: string, id: string, input: z.output<typeof body>,
     const a = await loadAnalytics(m.supabase, survey.data, filters)
     if (!a.ok) return json({ error: a.error.message }, 500)
     const rows = summaryRows(a.data.blocks)
-    await logExport({ workspaceId: m.workspace.id, actorId: m.user.id, surveyId: id, scope: 'summary', format: 'csv', filters: sqlFilters, rows: a.data.responseCount })
+    await logExport(m.supabase, { workspaceId: m.workspace.id, surveyId: id, scope: 'summary', format: 'csv', filters: sqlFilters, rows: a.data.responseCount })
     return new Response(toCsv(SUMMARY_HEADER, rows), {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
@@ -97,7 +98,7 @@ async function runExport(slug: string, id: string, input: z.output<typeof body>,
   const labels = plan.columns.map((c) => c.label)
 
   if (total.data <= DIRECT_LIMIT[input.format]) {
-    await logExport({ workspaceId: m.workspace.id, actorId: m.user.id, surveyId: id, scope: 'responses', format: input.format, filters: sqlFilters, rows: total.data })
+    await logExport(m.supabase, { workspaceId: m.workspace.id, surveyId: id, scope: 'responses', format: input.format, filters: sqlFilters, rows: total.data })
     if (input.format === 'csv') {
       return new Response(csvStream(m.supabase, id, sqlFilters, plan, { labels: input.labels }), {
         headers: {
@@ -139,9 +140,8 @@ async function runExport(slug: string, id: string, input: z.output<typeof body>,
     const body = await buildXlsx({ header, labels, rows, summary: a.ok ? summaryRows(a.data.blocks) : [], questions: questionInfo(plan, snaps.data.snapshots) })
     return { body, rows: rows.length }
   })
-  await logExport({
+  await logExport(m.supabase, {
     workspaceId: m.workspace.id,
-    actorId: m.user.id,
     surveyId: id,
     scope: 'responses',
     format: input.format,

@@ -2,8 +2,7 @@ import { createHash } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthContext } from '@/lib/auth'
 import { memberCan } from '@/lib/auth/roles'
-import { getMembership, getWorkspaceBySlug } from '@/lib/db/workspaces'
-import { removeLogoObject, setWorkspaceLogoPath, uploadLogoObject } from '@/lib/admin/db/workspace'
+import { getMembership, getWorkspaceBySlug, removeLogoObject, setWorkspaceLogoPath, uploadLogoObject } from '@/lib/db/workspaces'
 import { checkLogo, LOGO_MAX_BYTES } from '@/lib/admin/image'
 
 /**

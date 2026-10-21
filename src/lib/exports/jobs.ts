@@ -1,12 +1,8 @@
 import 'server-only'
 import { orderedQuestions } from '@/lib/analytics/analyze'
-import {
-  readAnswers,
-  readContactEmails,
-  readResponsePage,
-  readTokens,
-  type ExportJobRow,
-} from '@/lib/analytics/data'
+import { readAnswers, readResponsePage } from '@/lib/db/responses'
+import { readContactEmails, readTokens } from '@/lib/db/contacts'
+import { logExport as logExportRow, setExportJobStatus, type ExportJobRow } from '@/lib/db/exports'
 import { fail, makeDbError, ok, type DbResult } from '@/lib/db/errors'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { UserClient } from '@/lib/supabase/types'
@@ -19,8 +15,9 @@ import { BOM, csvLine } from './csv'
  * Response exports (doc 04 section 6.4). Row reads run as the signed-in
  * member (RLS applies). The service role is used only for what members
  * cannot do under RLS: writing the export file to the private `exports`
- * bucket, updating the export_jobs row, signing its URL, and writing the
- * activity_log entry. Callers have already checked editor and above.
+ * bucket, updating the export_jobs row, and signing its URL. The
+ * activity_log entry goes through log_export as the member. Callers have
+ * already checked editor and above for row level exports.
  */
 
 export const DIRECT_LIMIT = { csv: 5000, xlsx: 2000 } as const
@@ -167,21 +164,18 @@ export async function finishJob(
   const admin = createAdminClient()
   const path = jobObjectPath(job)
   try {
-    await admin.from('export_jobs').update({ status: 'running' }).eq('id', job.id)
+    await setExportJobStatus(admin, { jobId: job.id, status: 'running' })
     const { body, rows } = await produce()
     const up = await admin.storage
       .from('exports')
       .upload(path, body, { contentType: job.format === 'csv' ? 'text/csv; charset=utf-8' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', upsert: true })
     if (up.error) throw up.error
-    await admin
-      .from('export_jobs')
-      .update({ status: 'done', storage_path: `exports/${path}`, row_count: rows, finished_at: new Date().toISOString() })
-      .eq('id', job.id)
+    await setExportJobStatus(admin, { jobId: job.id, status: 'done', storagePath: `exports/${path}`, rowCount: rows })
     const url = await signedJobUrl(job.workspace_id, `exports/${path}`)
     if (!url) return fail(makeDbError('unknown', 'could not sign the export file'))
     return ok({ url, rows })
   } catch (e) {
-    await admin.from('export_jobs').update({ status: 'failed', finished_at: new Date().toISOString() }).eq('id', job.id)
+    await setExportJobStatus(admin, { jobId: job.id, status: 'failed' })
     const timeout = e instanceof Error && e.message === 'export_timeout'
     return fail(makeDbError(timeout ? 'invalid_state' : 'unknown', timeout ? 'export_timeout' : e instanceof Error ? e.message : undefined))
   }
@@ -199,7 +193,6 @@ export async function signedJobUrl(workspaceId: string, storagePath: string): Pr
 
 export type ExportLog = {
   workspaceId: string
-  actorId: string
   surveyId: string
   scope: 'responses' | 'summary' | 'report'
   format: 'csv' | 'xlsx'
@@ -210,24 +203,15 @@ export type ExportLog = {
 
 /**
  * Every export, aggregate or row level, writes activity_log (doc 04 section
- * 6). activity_log has no member insert policy and write_activity is not
- * granted to members, so this inserts with the service role after the route
- * verified the member. TODO(foundation): a `log_export` SQL function granted
- * to authenticated would keep this under RLS.
+ * 6) through log_export as the member: editor for responses, viewer for
+ * summary and report. A failed log never blocks the download.
  */
-export async function logExport(e: ExportLog): Promise<void> {
-  try {
-    await createAdminClient()
-      .from('activity_log')
-      .insert({
-        workspace_id: e.workspaceId,
-        actor: e.actorId,
-        entity: 'export',
-        entity_id: e.jobId ?? e.surveyId,
-        action: `export_${e.scope}`,
-        diff: { survey_id: e.surveyId, format: e.format, filters: e.filters, row_count: e.rows } as never,
-      })
-  } catch (err) {
-    console.error('export activity log failed', err)
-  }
+export async function logExport(client: UserClient, e: ExportLog): Promise<void> {
+  const r = await logExportRow(client, {
+    workspaceId: e.workspaceId,
+    kind: e.scope,
+    scope: { survey_id: e.surveyId, format: e.format, filters: e.filters, ...(e.jobId ? { job_id: e.jobId } : {}) },
+    rowCount: e.rows,
+  })
+  if (!r.ok) console.error('export activity log failed', r.error.code)
 }
