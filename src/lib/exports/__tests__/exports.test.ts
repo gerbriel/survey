@@ -58,6 +58,11 @@ describe('csv writer', () => {
     expect(guardInjection('-5')).toBe('-5')
     expect(guardInjection('-0.25')).toBe('-0.25')
     expect(escapeCsvCell('=1,2')).toBe(`"'=1,2"`)
+    // D-06: leading whitespace, LF and the semicolon delimiter
+    for (const s of ['  =1+1', ' \t@x', '\n=1', '\u00a0=1']) expect(guardInjection(s).startsWith("'")).toBe(true)
+    expect(escapeCsvCell('Paris;=HYPERLINK("http://x","c")')).toBe('"Paris;=HYPERLINK(""http://x"",""c"")"')
+    expect(escapeCsvCell('a;b')).toBe('"a;b"')
+    expect(guardInjection(' -5')).toBe("' -5")
   })
   it('BOM, CRLF and optional label row', () => {
     const s = toCsv(['a', 'b'], [[1, 'x']], ['A', 'B'])

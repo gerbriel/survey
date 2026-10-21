@@ -121,6 +121,18 @@ describe('defaults, share and state helpers', () => {
     expect(publicAssetUrl(undefined, 'x')).toBeNull()
   })
 
+  it('D-17: refuses absolute URLs, schemes, protocol-relative paths and dot segments', () => {
+    for (const p of ['https://evil.example/p.png', 'http://x/y', 'data:image/png;base64,AA', '//evil.example/p.png', 'ws/../other/logo.png', 'ws\\x.png']) {
+      expect(publicAssetUrl('https://x.supabase.co', p)).toBeNull()
+    }
+  })
+
+  it('D-17: asset object names are validated at write time', async () => {
+    const { isAssetObjectName } = await import('@/lib/db/rpc')
+    expect(isAssetObjectName('3f1c/surveys/abc/og-123.png')).toBe(true)
+    for (const p of ['https://evil.example/a.png', '/ws/a.png', 'ws/../a.png', 'ws//a.png', 'javascript:x', '']) expect(isAssetObjectName(p)).toBe(false)
+  })
+
   it('checks aliases like SQL does', () => {
     expect(aliasProblem('spring-feedback', RESERVED_ALIASES)).toBeNull()
     expect(aliasProblem('admin', RESERVED_ALIASES)).toMatch(/reserved/)

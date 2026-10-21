@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Json } from '@/types/db-helpers'
 import type { AdminClient, UserClient } from '@/lib/supabase/types'
 import { fail, ok, toDbError, type DbResult } from './errors'
-import { call, id, type StorageDeletion } from './rpc'
+import { call, id, ilikeEscape, type StorageDeletion } from './rpc'
 
 /**
  * Respondent erasure, GDPR export and retention (migrations 0014 and 0015,
@@ -131,10 +131,11 @@ export async function findRespondents(
       if (!out.has(c.id)) out.set(c.id, { id: c.id, email: c.email, name: fullName(c), status: c.status, matchedBy: by })
     }
     if (q.kind === 'email') {
-      const direct = await client.from('contacts').select(cols).eq('workspace_id', workspaceId).ilike('email', q.value).is('merged_into', null).limit(20)
+      // D-18: `_` and `%` in an address match literally.
+      const direct = await client.from('contacts').select(cols).eq('workspace_id', workspaceId).ilike('email', ilikeEscape(q.value)).is('merged_into', null).limit(20)
       if (direct.error) return fail(toDbError(direct.error))
       for (const c of direct.data ?? []) add(c, 'email')
-      const aliases = await client.from('contact_aliases').select('contact_id').eq('workspace_id', workspaceId).ilike('email', q.value).limit(20)
+      const aliases = await client.from('contact_aliases').select('contact_id').eq('workspace_id', workspaceId).ilike('email', ilikeEscape(q.value)).limit(20)
       if (aliases.error) return fail(toDbError(aliases.error))
       const ids = (aliases.data ?? []).map((a) => a.contact_id)
       if (ids.length) {

@@ -1,5 +1,5 @@
 import 'server-only'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import {
   ERROR_MESSAGES,
@@ -14,7 +14,7 @@ import {
 import { submitResponse, type SubmitPayload, type SubmitResult, publishedVersion } from '@/lib/db/submission'
 import type { PublicSurvey } from '@/lib/db/publicRead'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { fileIdsFromAnswers, type SubmitResponse } from '@/components/public/protocol'
+import { fileIdsFromAnswers, HIDDEN_KEY_RE, MAX_HIDDEN_PARAMS, type SubmitResponse } from '@/components/public/protocol'
 import { clientIp, json, readJsonBody } from './http'
 import { resolveSurvey, surveyContext } from './load'
 import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret, type RateCheck } from './ratelimit'
@@ -28,14 +28,18 @@ import { verifyTurnstile } from './turnstile'
  *   2. body shape (zod)                         400 invalid_request
  *   3. survey open check (resolve_public_survey, anon)  404 / 409
  *   4. honeypot                                  fake 200, writes nothing
- *   5. rate limits (rate_limit_hit)              429 rate_limited
+ *   5. per-IP rate limits (rate_limit_hit)       429 rate_limited
  *   6. Turnstile, on create and on complete      403 captcha_failed
+ *   6b. shared per-survey bucket, only for requests that passed Turnstile  429
  *   7. full version (service role), migrateDefinition once
  *   8. validateSubmission: partial for save, final for complete  422
  *   9. submit_response (service role): idempotency, cap, token, files, state
  *
- * Decision: rate limits run before Turnstile, as doc 02 section 5.1 says,
- * so a flood costs one Postgres call per request and never a siteverify call.
+ * S2 (R17, public H1): per-IP buckets run first, so a flood costs one
+ * Postgres call per request and never a siteverify call; Turnstile runs
+ * next; the shared per-survey bucket runs last and only counts requests that
+ * passed Turnstile, so unverified traffic can never exhaust a survey's quota.
+ * Resume token saves skip Turnstile and therefore never touch the shared bucket.
  * Decision: the survey check runs before the honeypot (it is one indexed
  * anon read) so the per-survey rate limits know the workspace.
  */
@@ -66,7 +70,11 @@ export const submitBody = z.object({
   respondentToken: z.string().min(1).max(200).optional(),
   respondentHash: z.string().regex(/^[a-f0-9]{16,64}$/).optional(),
   answers: z.record(z.string().max(80), z.unknown()),
-  hidden: z.record(z.string().max(64), z.string().max(500)).default({}),
+  // I8: hidden field keys use the client's URL param pattern, at most 50 keys.
+  hidden: z
+    .record(z.string().regex(HIDDEN_KEY_RE), z.string().max(500))
+    .refine((h) => Object.keys(h).length <= MAX_HIDDEN_PARAMS, 'too many hidden fields')
+    .default({}),
   uploadIds: z.array(z.guid()).max(200).default([]),
   startedAt: z.string().max(40),
   seed: z.string().max(64).optional(),
@@ -147,10 +155,25 @@ function filesManifest(answers: Record<string, unknown>): Record<string, FileRef
   return out
 }
 
+/**
+ * S4 (SQL M-1): Cloudflare gets a UUID-shaped SHA-256 of the submission key,
+ * never the key itself, so the key that addresses submission_idempotency
+ * does not leave the deployment. Stable per key, so retries still match.
+ */
+export function turnstileIdempotencyKey(key: string): string {
+  const h = createHash('sha256').update(`turnstile:${key}`).digest('hex')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`
+}
+
 export function toClientResult(r: SubmitResult, endingId: string | null): { status: number; body: SubmitResponse } {
   if (r.ok) {
     const body: SubmitResponse = { ok: true, responseId: r.response_id }
-    if (r.resume_token) body.resumeToken = r.resume_token
+    // S4: the secret goes out on the first save only. A replayed idempotency
+    // key answers the stored result with replayed: true and no secret. Old
+    // SQL (before 0019) may still carry resume_token on a replay, so the flag
+    // wins over whatever the row holds.
+    if (r.replayed === true) body.replayed = true
+    else if (r.resume_token) body.resumeToken = r.resume_token
     if (typeof r.score === 'number') body.score = { value: r.score, max: typeof r.score_max === 'number' ? r.score_max : r.score }
     if (endingId !== undefined) body.endingId = endingId
     return { status: 200, body }
@@ -178,22 +201,26 @@ export async function handleSubmit(req: Request): Promise<Response> {
   // 4. Honeypot: bots learn nothing.
   if (body.website !== '') return json({ ok: true, responseId: randomUUID() })
 
-  // 5. Rate limits.
+  // 5. Per-IP rate limits (S2, S9: R17). Create is keyed by IP plus survey.
   const admin = createAdminClient()
   const ip = clientIp(req.headers)
   const ipKey = hashIp(ip, rateLimitSecret())
   const ctx = await surveyContext(survey)
-  const checks: RateCheck[] = [{ rule: RATE_LIMITS.submitSurvey, key: body.surveyId }]
-  if (!body.resumeToken) checks.push({ rule: RATE_LIMITS.submitCreate, key: ipKey })
+  const checks: RateCheck[] = []
+  if (!body.resumeToken) checks.push({ rule: RATE_LIMITS.submitCreate, key: `${ipKey}:${body.surveyId}` })
   if (body.action === 'save') checks.push({ rule: RATE_LIMITS.submitSave, key: ipKey })
   else checks.push({ rule: RATE_LIMITS.submitComplete, key: `${ipKey}:${body.surveyId}`, max: ctx?.limits.rate_limit_per_hour })
   const rl = await checkRateLimits(admin, checks)
   if (!rl.ok) return fail('rate_limited', { retryAfter: rl.retryAfter }, { 'retry-after': String(rl.retryAfter) })
 
   // 6. Turnstile when this request creates a response, and on complete.
-  if (!body.resumeToken || body.action === 'complete') {
-    const t = await verifyTurnstile({ token: body.turnstileToken, ip, action: 'submit', idempotencyKey: body.idempotencyKey })
+  const needsCaptcha = !body.resumeToken || body.action === 'complete'
+  if (needsCaptcha) {
+    const t = await verifyTurnstile({ token: body.turnstileToken, ip, action: 'submit', idempotencyKey: turnstileIdempotencyKey(body.idempotencyKey) })
     if (!t.ok) return fail('captcha_failed')
+    // 6b. S2 (R17): the shared per-survey bucket counts verified requests only.
+    const shared = await checkRateLimits(admin, [{ rule: RATE_LIMITS.submitSurvey, key: body.surveyId }])
+    if (!shared.ok) return fail('rate_limited', { retryAfter: shared.retryAfter }, { 'retry-after': String(shared.retryAfter) })
   }
 
   // 7. Full definition of the version the respondent loaded, migrated once.

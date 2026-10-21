@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Tables, WorkspaceRole } from '@/types/db-helpers'
 import type { UserClient, UserOrAdminClient } from '@/lib/supabase/types'
-import { affected, call, id, jsonObject, workspaceRole, workspaceSlug } from './rpc'
+import { affected, assetObjectName, call, id, jsonObject, workspaceRole, workspaceSlug } from './rpc'
 
 export { workspaceSlug }
 
@@ -243,7 +243,8 @@ export function updateWorkspacePrivacy(
   )
 }
 
-export const setLogoInput = z.object({ workspaceId: id, logoPath: z.string().max(300).nullable() })
+// D-17: a relative object name, never an absolute URL.
+export const setLogoInput = z.object({ workspaceId: id, logoPath: assetObjectName.nullable() })
 
 export function setWorkspaceLogoPath(client: UserClient, input: z.input<typeof setLogoInput>) {
   return call(

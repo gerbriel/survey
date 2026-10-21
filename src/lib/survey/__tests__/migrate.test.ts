@@ -119,3 +119,18 @@ describe('migrateDefinition', () => {
     expect(issues).toContain('condition too deep')
   })
 })
+
+describe('L5 theme colors', () => {
+  const withColor = (primary: unknown) => ({ ...PIPING, theme: { ...PIPING.theme, colors: { ...PIPING.theme.colors, primary } } })
+
+  it('accepts #rgb and #rrggbb in either case', () => {
+    for (const c of ['#abc', '#A1B2C3', '#000000']) expect(checkDefinitionShape(withColor(c))).toEqual([])
+  })
+
+  it('rejects CSS declaration injection and anything that is not a short or long hex color', () => {
+    for (const c of ['#000;background-image:url(https://tracker.example/p)', 'red', 'rgb(0,0,0)', '#abcd', '#12345g', '', 7]) {
+      expect(checkDefinitionShape(withColor(c))).toContain('theme.colors.primary: expected #rgb or #rrggbb')
+      expect(() => migrateDefinition(withColor(c))).toThrow(DefinitionShapeError)
+    }
+  })
+})

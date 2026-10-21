@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { Badge } from '@/components/ui'
 import { AnswerView } from '@/components/responses/AnswerView'
 import {
@@ -14,10 +13,11 @@ import {
 import { DeleteResponseButton } from '@/components/responses/DeleteResponseButton'
 import { formatDateTime } from '@/components/responses/format'
 import { MarkSeen } from '@/components/responses/MarkSeen'
-import { requireMember, roleAtLeast } from '@/lib/auth'
+import { assertBelongsToWorkspace } from '@/lib/scope'
+import { roleAtLeast } from '@/lib/auth'
 import { getContact } from '@/lib/db/contacts'
-import { getResponse, listAnswers } from '@/lib/db/responses'
-import { getSurvey, getVersionDefinitions } from '@/lib/db/surveys'
+import { listAnswers } from '@/lib/db/responses'
+import { getVersionDefinitions } from '@/lib/db/surveys'
 import { deleteResponseAction } from '../actions'
 
 function Pairs({ title, items }: { title: string; items: [string, string][] }) {
@@ -43,14 +43,12 @@ export default async function ResponseDetailPage({
   params: Promise<{ slug: string; id: string; responseId: string }>
 }) {
   const { slug, id, responseId } = await params
-  const { supabase, role } = await requireMember(slug, 'viewer')
-  const [survey, response, answers] = await Promise.all([
-    getSurvey(supabase, { surveyId: id }),
-    getResponse(supabase, { responseId }),
-    listAnswers(supabase, { responseId }),
-  ])
-  if (!survey.ok || !survey.data || !response.ok || !response.data || response.data.survey_id !== id) notFound()
-  const r = response.data
+  // D-15: survey and response tied to this workspace before any other query.
+  const scoped = await assertBelongsToWorkspace(slug, { surveyId: id, responseId })
+  const { supabase, role } = scoped.member
+  const survey = { ok: true as const, data: scoped.survey! }
+  const r = scoped.response!
+  const answers = await listAnswers(supabase, { responseId })
   const [versions, contact] = await Promise.all([
     getVersionDefinitions(supabase, { versionIds: [r.survey_version_id] }),
     r.contact_id ? getContact(supabase, { contactId: r.contact_id }) : Promise.resolve(null),

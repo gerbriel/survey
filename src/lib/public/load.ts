@@ -108,11 +108,15 @@ export async function surveyContext(survey: Pick<PublicSurvey, 'workspace_id'>):
   }
 }
 
-/** Public URL of an object in the public-assets bucket. Accepts paths with or without the bucket prefix. */
+/**
+ * Public URL of an object in the public-assets bucket. Accepts paths with or
+ * without the bucket prefix. D-17: absolute URLs and schemes are refused.
+ */
 export function publicAssetUrl(path: string | null | undefined): string | null {
   if (!path) return null
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL
   if (!base) return null
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//') || path.includes('\\')) return null
   const clean = path.replace(/^\/+/, '').replace(/^public-assets\//, '')
   if (clean.includes('..')) return null
   return `${base.replace(/\/+$/, '')}/storage/v1/object/public/public-assets/${clean.split('/').map(encodeURIComponent).join('/')}`

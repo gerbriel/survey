@@ -24,6 +24,18 @@ export function isTestSecret(secret: string): boolean {
   return /^[123]x0{20,}/.test(secret)
 }
 
+/**
+ * L8: true when a Cloudflare test secret must be refused. Vercel production
+ * always refuses. Any other production build (self hosted, `next start`)
+ * refuses unless TURNSTILE_ALLOW_TEST_SECRET=1 is set explicitly, for
+ * example by the end to end test runner. Previews and dev may use them.
+ */
+export function testSecretRefused(env: NodeJS.ProcessEnv): boolean {
+  if (env.VERCEL_ENV === 'production') return true
+  if (env.VERCEL_ENV) return false
+  return env.NODE_ENV === 'production' && env.TURNSTILE_ALLOW_TEST_SECRET !== '1'
+}
+
 let warned = false
 
 export async function verifyTurnstile(opts: {
@@ -51,6 +63,11 @@ export async function verifyTurnstile(opts: {
     }
     console.error('[public] TURNSTILE_SECRET_KEY is not set in production; refusing the request.')
     return { ok: false, reason: 'not_configured' }
+  }
+  if (isTestSecret(secret) && testSecretRefused(env)) {
+    // L8: a copied test secret would pass every token; refuse loudly instead.
+    console.error('[public] TURNSTILE_SECRET_KEY is a Cloudflare test secret in production; refusing the request.')
+    return { ok: false, reason: 'test_secret_in_production' }
   }
   if (!opts.token || opts.token.length > 2048) return { ok: false, reason: 'missing_token' }
 

@@ -77,7 +77,7 @@ export function getPublicDefinition(client: AnonClient, input: z.input<typeof ge
   )
 }
 
-export type OgCard = { title: string; workspaceName: string; logoPath: string | null }
+export type OgCard = { surveyId: string; title: string; workspaceName: string; logoPath: string | null }
 
 export const ogCardInput = z.object({ versionId: id })
 
@@ -89,13 +89,14 @@ export function ogCard(admin: AdminClient, input: z.input<typeof ogCardInput>) {
     (v) =>
       admin
         .from('survey_versions')
-        .select('public_definition, status, surveys!inner(title, archived_at), workspaces!inner(name, logo_path, deleted_at)')
+        .select('survey_id, public_definition, status, surveys!inner(title, archived_at), workspaces!inner(name, logo_path, deleted_at)')
         .eq('id', v.versionId)
         .eq('status', 'published')
         .maybeSingle(),
     (row): OgCard | null => {
       if (!row) return null
       const r = row as unknown as {
+        survey_id: string
         public_definition: { settings?: { title?: unknown } } | null
         surveys: { title: string; archived_at: string | null } | null
         workspaces: { name: string; logo_path: string | null; deleted_at: string | null } | null
@@ -103,6 +104,7 @@ export function ogCard(admin: AdminClient, input: z.input<typeof ogCardInput>) {
       if (!r.workspaces || r.workspaces.deleted_at || !r.surveys || r.surveys.archived_at) return null
       const t = r.public_definition?.settings?.title
       return {
+        surveyId: r.survey_id,
         title: typeof t === 'string' && t.trim() ? t : r.surveys.title,
         workspaceName: r.workspaces.name,
         logoPath: r.workspaces.logo_path,

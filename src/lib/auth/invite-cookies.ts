@@ -36,3 +36,25 @@ export function inviteCookieOptions(nodeEnv: string | undefined = process.env.NO
 export function isPlausibleInviteToken(token: string | null | undefined): token is string {
   return typeof token === 'string' && token.length >= 8 && token.length <= 200 && /^[A-Za-z0-9_-]+$/.test(token)
 }
+
+export const SIGNUP_NEEDS_INVITE_MESSAGE =
+  'Password sign-up needs an invite link. Open the invite link you were sent, then create your account, or sign in with Google.'
+
+export type SignupInviteGuard =
+  | { ok: true; workspaceToken: string | null; platformToken: string | null }
+  | { ok: false; message: string }
+
+/**
+ * S1 (R18): a password signup's email is unverified (confirmations are off),
+ * so it is accepted only with an invite token from the invite cookie. Without
+ * a plausible token the signup action refuses before calling Supabase Auth.
+ * Google sign-in does not pass through here.
+ */
+export function signupInviteGuard(read: (name: string) => string | undefined): SignupInviteGuard {
+  const w = read(WORKSPACE_INVITE_COOKIE)
+  const p = read(PLATFORM_INVITE_COOKIE)
+  const workspaceToken = isPlausibleInviteToken(w) ? w : null
+  const platformToken = isPlausibleInviteToken(p) ? p : null
+  if (!workspaceToken && !platformToken) return { ok: false, message: SIGNUP_NEEDS_INVITE_MESSAGE }
+  return { ok: true, workspaceToken, platformToken }
+}

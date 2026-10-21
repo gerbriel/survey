@@ -214,16 +214,24 @@ export async function replaceWidgets(client: UserClient, input: z.input<typeof r
   )
 }
 
-const SHARE_COLS = 'id, report_id, workspace_id, token, expires_at, revoked_at, created_by, view_count, last_viewed_at, created_at, password_hash'
+// Coordinator item 4 (0019): password_hash is never selected. has_password
+// comes from a second query that filters on the column and returns ids only.
+const SHARE_COLS = 'id, report_id, workspace_id, token, expires_at, revoked_at, created_by, view_count, last_viewed_at, created_at'
 
-export function listShares(client: UserClient, input: z.input<typeof reportIdInput>) {
-  return call(
-    reportIdInput,
-    input,
-    (v) => client.from('report_shares').select(SHARE_COLS).eq('report_id', v.reportId).order('created_at', { ascending: false }),
-    (rows): ShareRow[] =>
-      (rows ?? []).map(({ password_hash, ...rest }) => ({ ...rest, has_password: password_hash !== null })),
+export async function listShares(client: UserClient, input: z.input<typeof reportIdInput>): Promise<DbResult<ShareRow[]>> {
+  const rows = await call(reportIdInput, input, (v) =>
+    client.from('report_shares').select(SHARE_COLS).eq('report_id', v.reportId).order('created_at', { ascending: false }),
   )
+  if (!rows.ok) return rows
+  const locked = await call(reportIdInput, input, (v) =>
+    client.from('report_shares').select('id').eq('report_id', v.reportId).not('password_hash', 'is', null),
+  )
+  if (!locked.ok) return locked
+  const withPassword = new Set(((locked.data ?? []) as { id: string }[]).map((r) => r.id))
+  return {
+    ok: true,
+    data: ((rows.data ?? []) as Omit<ShareRow, 'has_password'>[]).map((r) => ({ ...r, has_password: withPassword.has(r.id) })),
+  }
 }
 
 export const createShareInput = z.object({

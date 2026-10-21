@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { evaluate } from '@/lib/survey'
 import { PIPING, THEME } from '@/lib/survey/__tests__/fixtures'
 import { contrastRatio, ensureContrast, themeToCssVars } from '../theme'
-import { parseMdLite, richTextPlain, safeHref } from '../richtext'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { parseMdLite, richTextPlain, RichTextView, safeHref } from '../richtext'
 import { safeRedirect } from '../Endings'
 
 describe('theme', () => {
@@ -37,6 +39,21 @@ describe('md-lite', () => {
     expect(safeHref('http://x.org')).toBeNull()
     expect(safeHref('mailto:a@b.org')).toBe('mailto:a@b.org')
     expect(safeRedirect('mailto:a@b.org')).toBeNull()
+  })
+
+  it('L4: refuses userinfo and URL encodes piped values inside link hrefs', () => {
+    expect(safeHref('https://intranet.example.org@evil.example/login')).toBeNull()
+    expect(safeHref('https://user:pw@x.org/')).toBeNull()
+    const state = evaluate(PIPING, {}, { hidden: { p: '@evil.example/login' } })
+    const html = renderToStaticMarkup(
+      createElement(RichTextView, { text: '[Read](https://intranet.example.org/{{hidden:p}})', definition: PIPING, state }),
+    )
+    expect(html).toContain('href="https://intranet.example.org/%40evil.example%2Flogin"')
+    const glued = renderToStaticMarkup(
+      createElement(RichTextView, { text: '[Read](https://intranet.example.org{{hidden:p}})', definition: PIPING, state }),
+    )
+    expect(glued).not.toContain('evil.example/login"')
+    expect(glued).not.toMatch(/href="https:\/\/[^"]*@/)
   })
 
   it('pipes values as text, never as markup', () => {

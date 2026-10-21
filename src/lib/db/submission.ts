@@ -52,6 +52,8 @@ export type SubmitResult =
       response_id: string
       /** Plain resume secret, returned once on the first save only. */
       resume_token?: string
+      /** S4 (0019): set when an idempotency key was replayed; never carries a secret. */
+      replayed?: boolean
       score?: number
       score_max?: number
     }
@@ -92,6 +94,50 @@ export function createUpload(client: AdminClient, payload: z.input<typeof create
     (v) => client.rpc('create_upload', { p_payload: asJson(v) }),
     (d): CreateUploadResult => d as unknown as CreateUploadResult,
   )
+}
+
+export const responseFileCountInput = z.object({ surveyId: id, resumeTokenHash: sha256Hex })
+
+/**
+ * S10: files already held by the open partial a resume hash names, attached
+ * plus pending (minted for it, migration 0019 pending_response_id). Null when
+ * the hash names no open partial. create_upload enforces the same cap in SQL.
+ */
+export async function countResponseFiles(
+  admin: AdminClient,
+  input: z.input<typeof responseFileCountInput>,
+): Promise<DbResult<number | null>> {
+  const head = await call(responseFileCountInput, input, (v) =>
+    admin
+      .from('responses')
+      .select('id')
+      .eq('survey_id', v.surveyId)
+      .eq('resume_token_hash', v.resumeTokenHash)
+      .eq('status', 'partial')
+      .maybeSingle(),
+  )
+  if (!head.ok) return head
+  if (!head.data) return { ok: true, data: null }
+  const responseId = (head.data as { id: string }).id
+  const byResponse = z.object({ responseId: id })
+  const attached = await call(byResponse, { responseId }, (v) =>
+    admin
+      .from('response_files')
+      .select('id', { count: 'exact', head: true })
+      .eq('response_id', v.responseId)
+      .then((r) => ({ data: r.count ?? 0, error: r.error })),
+  )
+  if (!attached.ok) return attached
+  const pending = await call(byResponse, { responseId }, (v) =>
+    admin
+      .from('response_files')
+      .select('id', { count: 'exact', head: true })
+      .eq('pending_response_id', v.responseId)
+      .eq('status', 'pending')
+      .then((r) => ({ data: r.count ?? 0, error: r.error })),
+  )
+  if (!pending.ok) return pending
+  return { ok: true, data: Number(attached.data) + Number(pending.data) }
 }
 
 export const rateLimitInput = z.object({

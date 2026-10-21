@@ -16,6 +16,7 @@ import {
   PIXEL_VALUE_HINTS,
   RAW_SCRIPT_WARNING,
   isRawScriptType,
+  rawScriptStateText,
   type PixelType,
 } from '@/lib/admin/pixels'
 
@@ -64,9 +65,11 @@ export function PixelForm({
         error={fieldError(state, 'type')}
       />
       {raw ? (
-        <p role="note" className="rounded-md border border-warning p-3 text-sm">
-          {RAW_SCRIPT_WARNING}
-        </p>
+        // S3 (R16): kill switch state and the cross-workspace exposure warning.
+        <div role="note" className="flex flex-col gap-2 rounded-md border border-warning p-3 text-sm">
+          <p className="font-medium">{rawScriptStateText(rawAllowed)}</p>
+          <p>{RAW_SCRIPT_WARNING}</p>
+        </div>
       ) : null}
       {type === 'custom_script' ? (
         <TextArea

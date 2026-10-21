@@ -7,6 +7,7 @@ import { GLOBAL_LIMIT_DEFAULTS } from '../limits'
 const MIGRATIONS = join(process.cwd(), 'supabase', 'migrations')
 const sql = readdirSync(MIGRATIONS)
   .filter((f) => f.endsWith('.sql'))
+  .sort()
   .map((f) => readFileSync(join(MIGRATIONS, f), 'utf8'))
   .join('\n')
 
@@ -27,8 +28,8 @@ describe('error codes stay in step with the migrations', () => {
 })
 
 describe('GLOBAL_LIMIT_DEFAULTS', () => {
-  it('matches effective_limits() in migration 0003', () => {
-    const body = sql.slice(sql.indexOf('create or replace function effective_limits'))
+  it('matches the LAST effective_limits() definition in the migrations (0019 redefines it)', () => {
+    const body = sql.slice(sql.lastIndexOf('create or replace function effective_limits'))
     const pick = (col: string) => {
       const m = new RegExp(`coalesce\\(l\\.${col}, ([0-9a-z]+)\\)`).exec(body)
       return m?.[1]

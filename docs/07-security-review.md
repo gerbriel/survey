@@ -61,4 +61,20 @@ Then Fable runs the gates, commits, and updates the status column below. Phase 3
 
 | # | Status |
 |---|---|
-| S1 to S12 | Open, assigned 2026-10-21 |
+| S1 | Fixed in 0019 and in app (I3-APP: password signup refused without an invite cookie token, `signupInviteGuard`) |
+| S2 | Fixed in app (per-IP, then Turnstile, then the per-survey bucket for verified requests only) |
+| S3 | Fixed in 0019 and in app (one type-based kill switch, fails closed; defaults false; no answers or seed in browser storage, legacy mirrors purged; consent per survey; renderer attr allow list matches settings; R16 warnings on the pixel picker and admin limits) |
+| S4 | Fixed in 0019 and in app (replay answers `replayed: true` without a secret for old and new SQL shapes; Turnstile gets a hash of the key) |
+| S5 | Fixed in 0019 |
+| S6 | Fixed in app (self and platform admin targets refused; audit row first, abort on failure; link only in the acting admin's response) |
+| S7 | Fixed in 0019 |
+| S8 | Fixed in app (contacts export logged by I2; link CSV logged as kind `contacts`, scope `export: links`, fail closed; SQL has no `links` kind) |
+| S9 | Fixed in app (one `clientIp()`, platform header then last XFF; IPv6 keyed by /64; `submit:create` 60 per 10 minutes by IP plus survey; share password adds a per-token ceiling) |
+| S10 | Fixed in 0019 and in app (upload route checks the client-declared and server-counted file cap before minting; `vercel.json` cron schedules; attach size check is SQL only) |
+| S11 | Fixed in app (per-IP and per-survey buckets ahead of the rid bucket) |
+| S12 | Fixed in app (`__Host-sb-auth` cookie name in production via `cookieOptions.name`) |
+| SQL Low list: L-1, L-5, L-6, L-8/D-13, L-9, L-10, L-12, D-07, I6 | Fixed in 0019 |
+| L-3/D-12 | Fixed in 0019 and in app (`password_hash` never selected; `REPORT_SHARE_SECRET` required in production) |
+| L-13 | Fixed in 0019 and in app (`deleteResponse` calls `delete_response`) |
+| D-18 password minimum | Fixed in `supabase/config.toml` (8) |
+| App Low list: D-05, D-06, D-14, D-15, D-17, D-18 (app items), L4, L5, L7, L8, I4, I7, I8 | Fixed in app |

@@ -7,6 +7,7 @@ import { CopyButton } from '@/components/dashboard/CopyButton'
 import { FormStatus, SubmitButton, TextArea, fieldError } from '@/components/dashboard/form'
 import { IDLE, type ActionState } from '@/lib/admin/forms'
 import { LIMIT_FIELDS } from '@/lib/admin/limits-form'
+import { RAW_SCRIPT_EXPOSURE } from '@/lib/admin/pixels'
 
 type Action = (prev: ActionState, form: FormData) => Promise<ActionState>
 
@@ -129,13 +130,17 @@ export function LimitsEditor({ action, defaults }: { action: Action; defaults: R
         name="rawScript"
         defaultValue={defaults.rawScript ?? 'default'}
         options={[
-          { value: 'default', label: 'Default (allowed)' },
+          // S3 (R16): the default is off for every workspace.
+          { value: 'default', label: 'Default (turned off)' },
           { value: 'allowed', label: 'Allowed' },
           { value: 'blocked', label: 'Turned off (kill switch)' },
         ]}
         hint="Turned off stops existing script pixels from loading and blocks enabling new ones."
         error={fieldError(state, 'rawScript')}
       />
+      <p role="note" className="rounded-md border border-warning p-3 text-sm sm:col-span-2">
+        {RAW_SCRIPT_EXPOSURE}
+      </p>
       <div className="sm:col-span-2">
         <TextArea
           label="Note"

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { requireMember } from '@/lib/auth'
+import { assertBelongsToWorkspace } from '@/lib/scope'
 import { deleteResponse, getInboxRow, type InboxRow } from '@/lib/db/responses'
 
 /**
@@ -21,8 +22,9 @@ export async function deleteResponseAction(
   surveyId: string,
   responseId: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  const { supabase } = await requireMember(slug, 'admin')
-  const r = await deleteResponse(supabase, { responseId })
+  // D-15: the response must belong to this survey and workspace.
+  const { member } = await assertBelongsToWorkspace(slug, { surveyId, responseId }, 'admin')
+  const r = await deleteResponse(member.supabase, { responseId })
   if (!r.ok) return { ok: false, message: r.error.message }
   revalidatePath(`/w/${slug}/surveys/${surveyId}/responses`)
   return { ok: true }

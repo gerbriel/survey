@@ -129,7 +129,12 @@ describe('CSV writing', () => {
     expect(csvCell('@x')).toBe("'@x")
     expect(csvCell('a "b", c')).toBe('"a ""b"", c"')
     expect(csvCell(null)).toBe('')
-    expect(csvCell(['a', 'b'])).toBe('a; b')
+    expect(csvCell(['a', 'b'])).toBe('"a; b"')
+    // D-06: leading whitespace, tab, CR and the semicolon delimiter
+    expect(csvCell('  =1+1')).toBe("'  =1+1")
+    expect(csvCell('\t=1')).toBe("'\t=1")
+    expect(csvCell('\r=1')).toBe(`"'\r=1"`)
+    expect(csvCell('Paris;=HYPERLINK("http://x")')).toBe('"Paris;=HYPERLINK(""http://x"")"')
   })
   it('writes a BOM and CRLF lines', () => {
     expect(toCsv(['a', 'b'], [[1, 'x']])).toBe('﻿a,b\r\n1,x\r\n')

@@ -22,7 +22,8 @@ export async function pixelsFor(
     hostKind: await getHostKind(),
     excludedIds: definitionExclusions(definition),
     // SQL already omits gtm and custom_script under the kill switch; this is the second check.
-    rawScriptAllowed: ctx?.limits.raw_script_pixels_allowed ?? true,
+    // S3 (R16): fails closed when the limits cannot be read.
+    rawScriptAllowed: ctx?.limits.raw_script_pixels_allowed === true,
   })
   if (mode === 'in_form' && !hasTrackingGate(definition)) return { pixels: [], mode }
   return { pixels, mode }

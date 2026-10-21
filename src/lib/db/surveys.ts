@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Json, Tables } from '@/types/db-helpers'
 import type { UserClient, UserOrAdminClient } from '@/lib/supabase/types'
-import { asJson, call, id } from './rpc'
+import { asJson, assetObjectName, call, id } from './rpc'
 
 /**
  * Survey creation, aliases, draft locks and autosave (migration 0005,
@@ -268,7 +268,8 @@ const settingsPatch = z
     excluded_pixel_ids: z.array(id),
     og_title: z.string().max(120).nullable(),
     og_description: z.string().max(300).nullable(),
-    og_image_path: z.string().max(500).nullable(),
+    // D-17: a relative object name, never an absolute URL.
+    og_image_path: assetObjectName.nullable(),
     allow_indexing: z.boolean(),
     title: z.string().trim().min(1).max(200),
   })

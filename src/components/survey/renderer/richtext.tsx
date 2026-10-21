@@ -54,10 +54,14 @@ export function parseMdLite(text: string): MdNode[] {
   return out
 }
 
-/** Only https and mailto links render as links (doc 02 section 10). */
+/**
+ * Only https and mailto links render as links (doc 02 section 10).
+ * L4: a URL carrying userinfo (`https://trusted@evil.example`) is refused.
+ */
 export function safeHref(href: string): string | null {
   try {
     const u = new URL(href)
+    if (u.username || u.password) return null
     return u.protocol === 'https:' || u.protocol === 'mailto:' ? u.toString() : null
   } catch {
     return null
@@ -66,6 +70,11 @@ export function safeHref(href: string): string | null {
 
 function fill(s: string, values: string[]): string {
   return s.replace(PLACEHOLDER_RE, (_m, i: string) => values[Number(i)] ?? '')
+}
+
+/** L4: piped values inside a link href are URL encoded, so they cannot change the host or path shape. */
+export function fillHref(s: string, values: string[]): string {
+  return s.replace(PLACEHOLDER_RE, (_m, i: string) => encodeURIComponent(values[Number(i)] ?? ''))
 }
 
 function renderNodes(nodes: MdNode[], values: string[], keyBase: string): ReactNode[] {
@@ -82,7 +91,7 @@ function renderNodes(nodes: MdNode[], values: string[], keyBase: string): ReactN
       case 'em':
         return <em key={key}>{renderNodes(n.c, values, key)}</em>
       case 'link': {
-        const href = safeHref(fill(n.href, values))
+        const href = safeHref(fillHref(n.href, values))
         const body = renderNodes(n.c, values, key)
         if (!href) return <Fragment key={key}>{body}</Fragment>
         // Decision: links open in a new tab so a click never loses survey progress (doc 02 section 9).

@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { reportShareGate, sharedReportPayload, type ReportShareGateStatus } from '@/lib/db/reports'
 import { rateLimitHit } from '@/lib/db/submission'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { rateKeyIp } from '@/lib/public/http'
 import { sanitizeSharedPayload, SHARE_TOKEN_RE, type SafeSharedPayload } from './share-payload'
 
 /**
@@ -20,11 +21,17 @@ export function isShareToken(token: string): boolean {
   return SHARE_TOKEN_RE.test(token)
 }
 
-/** Secret for the password cookie. Decision: REPORT_SHARE_SECRET, else derived from the service role key. */
-export function shareCookieSecret(): string {
-  const s = process.env.REPORT_SHARE_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!s) throw new Error('REPORT_SHARE_SECRET or SUPABASE_SERVICE_ROLE_KEY must be set')
-  return s
+/**
+ * Secret for the password cookie. I4: REPORT_SHARE_SECRET is required in
+ * production (at least 32 characters) with no fallback to the service role
+ * key, so rotating that key never logs out share viewers and the two secrets
+ * never share material. Outside production a fixed dev secret is used.
+ */
+export function shareCookieSecret(env: NodeJS.ProcessEnv = process.env): string {
+  const s = env.REPORT_SHARE_SECRET
+  if (s && s.length >= 32) return s
+  if (env.NODE_ENV === 'production') throw new Error('REPORT_SHARE_SECRET is not set (at least 32 characters)')
+  return 'dev-only-report-share-secret-do-not-use'
 }
 
 export type ShareGate = ReportShareGateStatus
@@ -53,9 +60,18 @@ export async function loadSharedReport(token: string, password: string | null): 
   return sanitizeSharedPayload(r.data)
 }
 
-/** 5 password attempts per 15 minutes per token and IP. The IP is hashed for the key, never stored. */
+/**
+ * 5 password attempts per 15 minutes per token and IP, plus 50 per hour per
+ * token from anywhere. The IP is hashed for the key, never stored.
+ * S9 (R17, public M1): IPv6 keys on the /64 prefix, and the per-token
+ * ceiling bounds guessing even across address rotation.
+ */
 export async function allowPasswordAttempt(token: string, ip: string): Promise<boolean> {
-  const key = createHash('sha256').update(`${token}:${ip}`).digest('hex').slice(0, 64)
-  const r = await rateLimitHit(createAdminClient(), { bucket: 'share_password', key, window: '15 minutes', max: 5 })
-  return r.ok && r.data
+  const admin = createAdminClient()
+  const key = createHash('sha256').update(`${token}:${rateKeyIp(ip)}`).digest('hex').slice(0, 64)
+  const r = await rateLimitHit(admin, { bucket: 'share_password', key, window: '15 minutes', max: 5 })
+  if (!r.ok || !r.data) return false
+  const tokenKey = createHash('sha256').update(token).digest('hex').slice(0, 64)
+  const t = await rateLimitHit(admin, { bucket: 'share_password_token', key: tokenKey, window: '1 hour', max: 50 })
+  return t.ok && t.data
 }

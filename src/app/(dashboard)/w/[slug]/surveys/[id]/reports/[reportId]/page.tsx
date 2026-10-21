@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import { ExportButtons } from '@/components/analytics/ExportButtons'
 import { FilterBar } from '@/components/analytics/FilterBar'
 import { ReportEditor } from '@/components/reports/ReportEditor'
@@ -9,10 +8,10 @@ import { SaveFiltersButton } from '@/components/reports/SaveFiltersButton'
 import { ShareManager } from '@/components/reports/ShareManager'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { requireMember, roleAtLeast } from '@/lib/auth'
+import { assertBelongsToWorkspace } from '@/lib/scope'
+import { roleAtLeast } from '@/lib/auth'
 import { questionOptions } from '@/lib/analytics/aggregate'
-import { getReport, listShares, listWidgets } from '@/lib/db/reports'
-import { getSurvey } from '@/lib/db/surveys'
+import { listShares, listWidgets } from '@/lib/db/reports'
 import { filtersFromReport, filtersToQuery, parseFilters } from '@/lib/analytics/filters'
 import { loadAnalytics } from '@/lib/analytics/load'
 import { responseFilePath } from '@/lib/exports/columns'
@@ -30,12 +29,11 @@ type Props = {
 /** One saved report (doc 04 section 5.1). Filters in the URL preview over the saved ones. */
 export default async function ReportPage({ params, searchParams }: Props) {
   const { slug, id, reportId } = await params
-  const m = await requireMember(slug, 'viewer')
-  const [survey, report] = await Promise.all([
-    getSurvey(m.supabase, { workspaceId: m.workspace.id, surveyId: id }),
-    getReport(m.supabase, { reportId }),
-  ])
-  if (!survey.ok || !survey.data || !report.ok || !report.data || report.data.survey_id !== id) notFound()
+  // D-15: survey and report tied to this workspace before any other query.
+  const scoped = await assertBelongsToWorkspace(slug, { surveyId: id, reportId })
+  const m = scoped.member
+  const survey = { ok: true as const, data: scoped.survey! }
+  const report = { ok: true as const, data: scoped.report! }
   const sp = await searchParams
   const previewing = Object.keys(sp).length > 0
   const filters = previewing ? parseFilters(sp) : filtersFromReport(report.data.filters)

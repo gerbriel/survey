@@ -52,7 +52,7 @@ describe('checkRateLimits', () => {
     ])
     expect(r).toEqual({ ok: false, retryAfter: 600 })
     expect(rateLimitHit).toHaveBeenCalledTimes(2)
-    expect(rateLimitHit.mock.calls[1]![1]).toEqual({ bucket: 'submit:create', key: 'ip', window: '10 minutes', max: 10 })
+    expect(rateLimitHit.mock.calls[1]![1]).toEqual({ bucket: 'submit:create', key: 'ip', window: '10 minutes', max: 60 })
   })
 
   it('uses an override max when given', async () => {

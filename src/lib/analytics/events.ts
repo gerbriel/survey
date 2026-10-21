@@ -2,6 +2,7 @@ import 'server-only'
 import { recordEvents } from '@/lib/db/events'
 import { rateLimitHit } from '@/lib/db/submission'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { hashIp, RATE_LIMITS, rateLimitSecret } from '@/lib/public/ratelimit'
 import { BEACON_MAX_BYTES, parseBeacon } from './beacon-schema'
 
 /**
@@ -15,10 +16,9 @@ import { BEACON_MAX_BYTES, parseBeacon } from './beacon-schema'
  * and the version is published, drops unknown types and `complete`, and
  * clamps occurred_at.
  *
- * Decision: one rate limit check per batch, 300 batches per rid per hour
- * (bucket "events_rid"). With at most 50 events per batch this is lenient;
- * the survey wide 10,000 per minute limit of doc 04 is not enforced in v1 to
- * keep each beacon to two database calls.
+ * S11 (R17, public M3): three buckets per batch, in order: 120 batches per
+ * minute per IP (hashed, IPv6 by /64), 10,000 per minute per survey, and 300
+ * per hour per rid. The rid is client chosen, so it never stands alone.
  */
 export { BEACON_MAX_BYTES, BEACON_MAX_EVENTS, beaconEnvelope, beaconEvent, parseBeacon } from './beacon-schema'
 
@@ -26,7 +26,7 @@ export const RID_LIMIT = { window: '1 hour', max: 300 } as const
 
 export type IngestOutcome = 'recorded' | 'invalid' | 'rate_limited' | 'empty' | 'error'
 
-export async function ingestBeacon(raw: string): Promise<{ outcome: IngestOutcome; inserted: number }> {
+export async function ingestBeacon(raw: string, opts: { ip: string }): Promise<{ outcome: IngestOutcome; inserted: number }> {
   if (raw.length === 0 || raw.length > BEACON_MAX_BYTES) return { outcome: 'invalid', inserted: 0 }
   let body: unknown
   try {
@@ -39,14 +39,16 @@ export async function ingestBeacon(raw: string): Promise<{ outcome: IngestOutcom
   if (batch.events.length === 0) return { outcome: 'empty', inserted: 0 }
 
   const admin = createAdminClient()
-  const allowed = await rateLimitHit(admin, {
-    bucket: 'events_rid',
-    key: `${batch.survey_id}:${batch.rid}`,
-    window: RID_LIMIT.window,
-    max: RID_LIMIT.max,
-  })
-  if (!allowed.ok) return { outcome: 'error', inserted: 0 }
-  if (!allowed.data) return { outcome: 'rate_limited', inserted: 0 }
+  const checks = [
+    { bucket: RATE_LIMITS.eventsIp.bucket, key: hashIp(opts.ip, rateLimitSecret()), window: RATE_LIMITS.eventsIp.window, max: RATE_LIMITS.eventsIp.max },
+    { bucket: RATE_LIMITS.eventsSurvey.bucket, key: batch.survey_id, window: RATE_LIMITS.eventsSurvey.window, max: RATE_LIMITS.eventsSurvey.max },
+    { bucket: 'events_rid', key: `${batch.survey_id}:${batch.rid}`, window: RID_LIMIT.window, max: RID_LIMIT.max },
+  ]
+  for (const c of checks) {
+    const allowed = await rateLimitHit(admin, c)
+    if (!allowed.ok) return { outcome: 'error', inserted: 0 }
+    if (!allowed.data) return { outcome: 'rate_limited', inserted: 0 }
+  }
 
   const r = await recordEvents(
     admin,

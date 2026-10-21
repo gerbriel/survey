@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   clearAfterComplete,
   keys,
-  loadMirror,
   loadResumeToken,
-  saveMirror,
+  purgeLegacyAnswers,
   saveResumeToken,
   takeUrlTokens,
   type StoreLike,
@@ -51,17 +50,32 @@ describe('resume token storage', () => {
     expect(loadResumeToken(null, 'sid')).toBeNull()
   })
 
-  it('mirrors answers per version and clears everything after completion except the respondent id', () => {
+  it('clears the resume token after completion and keeps the respondent id', () => {
     const s = memStore()
-    saveMirror(s, 'sid', { versionId: 'v1', answers: { q_a: 'x' }, savedAt: 'now' })
-    expect(loadMirror(s, 'sid', 'v1')?.answers).toEqual({ q_a: 'x' })
-    expect(loadMirror(s, 'sid', 'v2')).toBeNull()
     saveResumeToken(s, 'sid', TOKEN)
     s.data.set(keys.respondent('sid'), 'rid')
     clearAfterComplete(s, 'sid')
     expect(loadResumeToken(s, 'sid')).toBeNull()
-    expect(loadMirror(s, 'sid', 'v1')).toBeNull()
     expect(s.data.get(keys.respondent('sid'))).toBe('rid')
+  })
+
+  it('S3 (R16): keeps no answers; purges answer mirrors and seeds left by earlier builds for every survey', () => {
+    const s = memStore()
+    s.data.set('survey:a:answers', '{"answers":{"q_a":"secret"}}')
+    s.data.set('survey:b:answers', '{}')
+    s.data.set('survey:a:seed', 'x')
+    s.data.set('survey:a:resume', TOKEN)
+    s.data.set('survey:consent:a', 'granted')
+    s.data.set('other', '1')
+    const withKeys = Object.assign(s, {
+      get length() {
+        return s.data.size
+      },
+      key: (i: number) => [...s.data.keys()][i] ?? null,
+    })
+    purgeLegacyAnswers(withKeys)
+    expect([...s.data.keys()].sort()).toEqual(['other', 'survey:a:resume', 'survey:consent:a'])
+    expect(Object.keys(keys)).toEqual(['resume', 'respondent'])
   })
 })
 

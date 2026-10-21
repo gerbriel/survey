@@ -21,12 +21,16 @@ export function parseCsv(text: string): ParsedCsv {
   return { headers, rows, errors }
 }
 
-/** Cells that a spreadsheet would run as a formula get a leading quote (doc 04 section 6.1). */
+/**
+ * Cells that a spreadsheet would run as a formula get a leading quote (doc 04
+ * section 6.1). D-06: leading whitespace before =, +, -, @, tab, CR or LF is
+ * guarded too, and a semicolon forces quoting (the `;` list separator locales).
+ */
 export function csvCell(value: unknown): string {
   if (value === null || value === undefined) return ''
   let s = typeof value === 'string' ? value : Array.isArray(value) ? value.join('; ') : String(value)
-  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`
-  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  if (/^\s*[=+\-@\t\r\n]/.test(s)) s = `'${s}`
+  return /[",;\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
 export function csvLine(values: unknown[]): string {

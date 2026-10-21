@@ -1,19 +1,25 @@
 /**
- * Respondent-side persistence (doc 02 section 5.3 and 11). localStorage
- * first: the resume token under `survey:{surveyId}:resume`, a mirror of the
- * answers so a failed save loses nothing, the response seed, and a random
- * respondent id for first-party events. Every access is guarded because
- * storage can be blocked (private mode, disabled cookies).
+ * Respondent-side persistence (doc 02 section 5.3 and 11).
+ *
+ * S3 (R16, public H2): every workspace's surveys share the public origin, so
+ * anything here is readable by any workspace's GTM or custom script. The
+ * browser therefore keeps no answers and no seed: only the opaque resume
+ * token under `survey:{surveyId}:resume` and the random respondent id used
+ * to join first-party events. Partial answers live server side; autosave
+ * sends them to the submit endpoint and boot rehydrates them through
+ * /api/public/resume. Every access is guarded because storage can be
+ * blocked (private mode, disabled cookies).
  */
 
 export type StoreLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
 export const keys = {
   resume: (surveyId: string) => `survey:${surveyId}:resume`,
-  answers: (surveyId: string) => `survey:${surveyId}:answers`,
-  seed: (surveyId: string) => `survey:${surveyId}:seed`,
   respondent: (surveyId: string) => `survey:${surveyId}:rid`,
 }
+
+/** S3 (R16): keys earlier builds wrote with answers or seeds; removed on every boot. */
+const LEGACY_KEY_RE = /^survey:[^:]+:(answers|seed)$/
 
 /** Same shape as the server check: gen_token(32) is 43 URL-safe base64 chars. */
 export const RESUME_TOKEN_RE = /^[A-Za-z0-9_-]{32,128}$/
@@ -22,7 +28,7 @@ export function isResumeToken(v: unknown): v is string {
   return typeof v === 'string' && RESUME_TOKEN_RE.test(v)
 }
 
-export function browserStore(): StoreLike | null {
+export function browserStore(): Storage | null {
   try {
     const s = window.localStorage
     const probe = '__survey_probe__'
@@ -61,22 +67,22 @@ export function saveResumeToken(store: StoreLike | null, surveyId: string, token
   write(store, keys.resume(surveyId), token && isResumeToken(token) ? token : null)
 }
 
-export type AnswerMirror = { versionId: string; answers: Record<string, unknown>; pageId?: string; savedAt: string }
-
-export function loadMirror(store: StoreLike | null, surveyId: string, versionId: string): AnswerMirror | null {
-  const raw = read(store, keys.answers(surveyId))
-  if (!raw) return null
+/**
+ * S3 (R16): deletes answer mirrors and seeds that earlier builds left in
+ * storage for any survey on this origin, so no answers stay at rest.
+ */
+export function purgeLegacyAnswers(store: (StoreLike & Pick<Storage, 'key' | 'length'>) | null): void {
   try {
-    const m = JSON.parse(raw) as AnswerMirror
-    if (!m || m.versionId !== versionId || typeof m.answers !== 'object' || m.answers === null) return null
-    return m
+    if (!store) return
+    const doomed: string[] = []
+    for (let i = 0; i < store.length; i++) {
+      const k = store.key(i)
+      if (k && LEGACY_KEY_RE.test(k)) doomed.push(k)
+    }
+    for (const k of doomed) store.removeItem(k)
   } catch {
-    return null
+    // Blocked storage holds nothing to purge.
   }
-}
-
-export function saveMirror(store: StoreLike | null, surveyId: string, mirror: AnswerMirror | null): void {
-  write(store, keys.answers(surveyId), mirror ? JSON.stringify(mirror) : null)
 }
 
 export function loadOrCreate(store: StoreLike | null, key: string, create: () => string, valid: (v: string) => boolean): string {
@@ -87,6 +93,7 @@ export function loadOrCreate(store: StoreLike | null, key: string, create: () =>
   return fresh
 }
 
+/** Consent choices only (survey:consent:{surveyId}); never answers. */
 export function writeValue(store: StoreLike | null, key: string, value: string | null): void {
   write(store, key, value)
 }
@@ -95,11 +102,9 @@ export function readValue(store: StoreLike | null, key: string): string | null {
   return read(store, key)
 }
 
-/** Clears everything kept for a survey after completion; the respondent id stays for event joins. */
+/** Clears the resume token after completion; the respondent id stays for event joins. */
 export function clearAfterComplete(store: StoreLike | null, surveyId: string): void {
   write(store, keys.resume(surveyId), null)
-  write(store, keys.answers(surveyId), null)
-  write(store, keys.seed(surveyId), null)
 }
 
 /**

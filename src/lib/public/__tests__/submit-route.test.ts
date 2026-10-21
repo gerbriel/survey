@@ -42,7 +42,7 @@ vi.mock('@/lib/db/submission', () => ({
 }))
 
 vi.mock('@/lib/db/limits', () => ({
-  GLOBAL_LIMIT_DEFAULTS: { rate_limit_per_hour: 20, raw_script_pixels_allowed: true, max_files_per_response: 20 },
+  GLOBAL_LIMIT_DEFAULTS: { rate_limit_per_hour: 20, raw_script_pixels_allowed: false, max_files_per_response: 20 },
   // resolve_public_survey returns workspace_id (0018), so the context step reads only the limits.
   getEffectiveLimits: async (_c: unknown, input: { workspaceId: string }) => {
     calls.push('context')
@@ -109,7 +109,7 @@ function body(over: Record<string, unknown> = {}) {
 function req(b: unknown, init: { method?: string; type?: string } = {}) {
   return new Request('http://s.example.org/api/public/submit', {
     method: init.method ?? 'POST',
-    headers: { 'content-type': init.type ?? 'application/json', 'x-forwarded-for': '203.0.113.9, 10.0.0.1' },
+    headers: { 'content-type': init.type ?? 'application/json', 'x-forwarded-for': '198.51.100.1, 203.0.113.9' },
     body: init.method === 'GET' ? undefined : JSON.stringify(b),
   })
 }
@@ -199,11 +199,73 @@ describe('POST /api/public/submit, order of checks', () => {
     expect(calls).toEqual(['survey'])
   })
 
-  it('5. rate limits run before Turnstile; a limited request never reaches siteverify', async () => {
+  it('5. per-IP rate limits run before Turnstile; a limited request never reaches siteverify', async () => {
     rateLimitHit.mockImplementation(async (input: { bucket: string }) => ({ ok: true, data: input.bucket !== 'submit:create' }))
     const r = await handle(req(body()))
     expect(r).toMatchObject({ status: 429, json: { code: 'rate_limited', retryAfter: 600 } })
-    expect(calls).toEqual(['survey', 'context', 'rate:submit:survey', 'rate:submit:create'])
+    // S2 (R17): the shared survey bucket is never touched by a request that failed a per-IP check.
+    expect(calls).toEqual(['survey', 'context', 'rate:submit:create'])
+  })
+
+  it('S2: a failed captcha never spends the shared per-survey bucket', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls.push('turnstile')
+        return new Response(JSON.stringify({ success: false }))
+      }),
+    )
+    expect((await handle(req(body()))).status).toBe(403)
+    expect(calls).not.toContain('rate:submit:survey')
+  })
+
+  it('S2: a resume token save skips Turnstile and the shared bucket', async () => {
+    await handle(req(body({ action: 'save', resumeToken: TOKEN, turnstileToken: undefined })))
+    expect(calls).toEqual(['survey', 'context', 'rate:submit:save', 'version', 'submit_response'])
+  })
+
+  it('S2: the shared per-survey bucket over its limit is a 429 after Turnstile', async () => {
+    rateLimitHit.mockImplementation(async (input: { bucket: string }) => ({ ok: true, data: input.bucket !== 'submit:survey' }))
+    const r = await handle(req(body()))
+    expect(r).toMatchObject({ status: 429, json: { code: 'rate_limited', retryAfter: 60 } })
+    expect(calls.slice(-2)).toEqual(['turnstile', 'rate:submit:survey'])
+    expect(calls).not.toContain('version')
+  })
+
+  it('S9: submit:create is keyed by IP plus survey id and allows 60 per 10 minutes', async () => {
+    await handle(req(body()))
+    const create = rateLimitHit.mock.calls.find((c) => (c[0] as { bucket: string }).bucket === 'submit:create')?.[0] as {
+      key: string
+      max: number
+      window: string
+    }
+    expect(create).toMatchObject({ max: 60, window: '10 minutes' })
+    expect(create.key.endsWith(`:${SURVEY_ID}`)).toBe(true)
+  })
+
+  it('I8: refuses hidden field keys outside the server pattern', async () => {
+    for (const hidden of [{ Src: 'x' }, { 'a-b': 'x' }, { ['a'.repeat(33)]: 'x' }, { _x: 'x' }]) {
+      expect((await handle(req(body({ hidden })))).status).toBe(400)
+    }
+    const many = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 'v']))
+    expect((await handle(req(body({ hidden: many })))).status).toBe(400)
+  })
+
+  it('S4: Turnstile receives a UUID-shaped hash of the idempotency key, never the key', async () => {
+    await handle(req(body()))
+    const fetchMock = globalThis.fetch as unknown as { mock: { calls: [string, RequestInit][] } }
+    const sent = fetchMock.mock.calls[0]![1].body as URLSearchParams
+    const key = sent.get('idempotency_key')
+    expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(key).not.toBe('0f8fad5b-d9cb-469f-a165-70867728950e')
+  })
+
+  it('S4: a replayed idempotency key answers replayed and never a resume secret', async () => {
+    // Old SQL shape (before 0019) still carries the secret; the flag wins.
+    submitResponse.mockResolvedValue({ ok: true, data: { ok: true, response_id: 'r9', resume_token: TOKEN, replayed: true } })
+    const r = await handle(req(body({ action: 'save' })))
+    expect(r.json).toMatchObject({ ok: true, responseId: 'r9', replayed: true })
+    expect(r.json).not.toHaveProperty('resumeToken')
   })
 
   it('5. complete uses the workspace rate limit from effective_limits', async () => {
@@ -224,7 +286,7 @@ describe('POST /api/public/submit, order of checks', () => {
     expect(r).toMatchObject({ status: 403, json: { code: 'captcha_failed' } })
     expect(calls.at(-1)).toBe('turnstile')
     expect(calls).not.toContain('version')
-    expect(calls.indexOf('rate:submit:survey')).toBeLessThan(calls.indexOf('turnstile'))
+    expect(calls.indexOf('rate:submit:create')).toBeLessThan(calls.indexOf('turnstile'))
   })
 
   it('6. a save with a resume token skips Turnstile', async () => {
@@ -248,10 +310,10 @@ describe('POST /api/public/submit, order of checks', () => {
     expect(calls).toEqual([
       'survey',
       'context',
-      'rate:submit:survey',
       'rate:submit:create',
       'rate:submit:complete',
       'turnstile',
+      'rate:submit:survey',
       'version',
       'submit_response',
     ])

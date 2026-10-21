@@ -1,10 +1,10 @@
 import 'server-only'
 import { z } from 'zod'
-import { createUpload } from '@/lib/db/submission'
+import { countResponseFiles, createUpload } from '@/lib/db/submission'
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { UploadResponse } from '@/components/public/protocol'
 import { clientIp, json, readJsonBody } from './http'
-import { resolveSurvey } from './load'
+import { resolveSurvey, surveyContext } from './load'
 import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret } from './ratelimit'
 import { resumeHashOrNull, resumeTokenSchema } from './resume'
 import { stateCode } from './submit'
@@ -31,6 +31,8 @@ const uploadBody = z.object({
   name: z.string().trim().min(1).max(255),
   size: z.number().int().positive(),
   mime: z.string().min(1).max(200),
+  /** S10: files the client already holds for this response. */
+  fileCount: z.number().int().min(0).max(1000).optional(),
   resumeToken: resumeTokenSchema.optional(),
   turnstileToken: z.string().max(2048).optional(),
   website: z.string().max(1000).default(''),
@@ -76,6 +78,24 @@ export async function handleUpload(req: Request): Promise<Response> {
   if (!hash) {
     const t = await verifyTurnstile({ token: body.turnstileToken, ip, action: 'upload' })
     if (!t.ok) return fail('captcha_failed')
+  }
+
+  // S10: the per response file cap, client declared and, once a partial
+  // exists, server counted (attached plus pending). create_upload enforces
+  // the same cap in SQL (0019); this check refuses before a row is written.
+  const ctx = await surveyContext(survey)
+  const cap = ctx?.limits.max_files_per_response ?? MAX_FILES_PER_RESPONSE
+  if ((body.fileCount ?? 0) >= cap) return fail('file_count')
+  if (hash) {
+    const counted = await countResponseFiles(admin, { surveyId: body.surveyId, resumeTokenHash: hash })
+    if (!counted.ok) {
+      // Fail open to SQL: create_upload counts again under a row lock.
+      console.error('[public] response file count failed', counted.error.code)
+    } else if (counted.data === null) {
+      return fail('invalid_request')
+    } else if (counted.data >= cap) {
+      return fail('file_count')
+    }
   }
 
   const r = await createUpload(admin, {

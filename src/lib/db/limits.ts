@@ -5,7 +5,7 @@ import { call, id } from './rpc'
 /**
  * Global limits (docs/00 "Global limits", R13) and the per-workspace view of
  * them from SQL effective_limits(). These defaults must equal the constants in
- * migration 0003 effective_limits(); a unit test pins them.
+ * the latest effective_limits() definition (migration 0019); a unit test pins them.
  */
 export const GLOBAL_LIMIT_DEFAULTS = {
   max_file_bytes: 26_214_400, // 25 MB
@@ -13,7 +13,8 @@ export const GLOBAL_LIMIT_DEFAULTS = {
   max_questions: 300,
   max_definition_bytes: 1_048_576, // 1 MB
   rate_limit_per_hour: 20,
-  raw_script_pixels_allowed: true,
+  // S3 (R16): GTM and custom scripts are off until a platform admin enables them per workspace.
+  raw_script_pixels_allowed: false,
 } as const
 
 export type EffectiveLimits = {

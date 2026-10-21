@@ -48,12 +48,11 @@ import {
   browserStore,
   clearAfterComplete,
   keys,
-  loadMirror,
   loadOrCreate,
   loadResumeToken,
+  purgeLegacyAnswers,
   randomHex,
   readValue,
-  saveMirror,
   saveResumeToken,
   takeUrlTokens,
   writeValue,
@@ -68,7 +67,8 @@ import { deviceKind, EventQueue, postJson, uploadToSignedUrl, uuid, type BeaconE
  * first-party events, pixels and consent, and the thank-you redirect.
  *
  * Boot order on mount: read and strip `?r=` and `?t=` from the address bar,
- * resume from the server or the local mirror, then render the renderer.
+ * resume from the server, then render the renderer. S3 (R16): no answers
+ * are kept in browser storage; the server copy is the only one.
  * Pixels can only mount after boot, so neither token reaches a pixel URL.
  */
 
@@ -113,7 +113,7 @@ const MESSAGES: Partial<Record<ErrorCode, string>> = {
   captcha_failed: 'Please confirm you are human, then submit again.',
   token_invalid: 'This personal link is not valid.',
   token_used: 'You have already responded with this link.',
-  server_error: 'We could not save your response. Your answers are kept on this device.',
+  server_error: 'We could not save your response. Please keep this page open and try again.',
 }
 
 const UPLOAD_MESSAGES: Partial<Record<ErrorCode, string>> = {
@@ -160,7 +160,6 @@ export function SurveyClient(props: SurveyClientProps) {
     surveyKey,
     surveyId,
     versionId,
-    workspaceId,
     workspaceName,
     serverSeed,
     pixels,
@@ -205,7 +204,9 @@ export function SurveyClient(props: SurveyClientProps) {
   const bootRef = useRef<Boot | null>(null)
   const queue = useRef<EventQueue | null>(null)
 
-  const consentScope = workspaceId ?? surveyId
+  // S3 (R16): consent is stored per survey, so one workspace's script cannot
+  // reuse another survey's stored choice by sharing a workspace key.
+  const consentScope = surveyId
 
   // ---------------------------------------------------------------- events
   const pushEvent = useCallback(
@@ -237,6 +238,8 @@ export function SurveyClient(props: SurveyClientProps) {
       if (!migrated.ok) return
       const s = browserStore()
       store.current = s
+      // S3 (R16): drop answer mirrors and seeds earlier builds left on this origin.
+      purgeLegacyAnswers(s)
       // Strip r and t before anything else can read the URL (doc 02 section 5.3).
       const tokens = takeUrlTokens(window.location.href)
       if (tokens.cleanUrl) window.history.replaceState(window.history.state, '', tokens.cleanUrl)
@@ -245,7 +248,8 @@ export function SurveyClient(props: SurveyClientProps) {
 
       let def: SurveyDefinition = migrated.definition
       let ver = versionId
-      let seed = loadOrCreate(s, keys.seed(surveyId), () => serverSeed, (v) => v.length > 0 && v.length <= 64)
+      // S3 (R16): the seed is not stored in the browser; a resumed partial brings its own.
+      let seed = serverSeed
       let initialAnswers: Record<string, unknown> | undefined
       let initialPageId: string | undefined
       let startedAt = new Date().toISOString()
@@ -285,14 +289,6 @@ export function SurveyClient(props: SurveyClientProps) {
           token = null
         }
       }
-      if (!initialAnswers) {
-        const mirror = loadMirror(s, surveyId, ver)
-        if (mirror) {
-          initialAnswers = mirror.answers
-          initialPageId = mirror.pageId
-        }
-      }
-      writeValue(s, keys.seed(surveyId), seed)
 
       const stored = readValue(s, consentStorageKey(consentScope)) as StoredConsent
       const c = initialConsent(consentMode, pixels.length, stored === 'granted' || stored === 'denied' || stored === 'dismissed' ? stored : null)
@@ -361,7 +357,7 @@ export function SurveyClient(props: SurveyClientProps) {
         try {
           navigator.sendBeacon('/api/public/submit', new Blob([JSON.stringify(body)], { type: 'application/json' }))
         } catch {
-          // the local mirror still has the answers
+          // the next autosave or the submit carries the answers
         }
       }
     }
@@ -435,12 +431,7 @@ export function SurveyClient(props: SurveyClientProps) {
   function onAutosave(snap: AutosaveSnapshot): Promise<void> {
     latest.current = snap
     dirty.current = true
-    saveMirror(store.current, surveyId, {
-      versionId: bootRef.current?.versionId ?? versionId,
-      answers: snap.answers,
-      pageId: snap.page_id,
-      savedAt: new Date().toISOString(),
-    })
+    // S3 (R16): answers go to the server only, never to browser storage.
     const next = saveChain.current.then(() => doSave(snap)).catch(() => undefined)
     saveChain.current = next
     return next
@@ -567,6 +558,8 @@ export function SurveyClient(props: SurveyClientProps) {
       name: file.name,
       size: file.size,
       mime: file.type || 'application/octet-stream',
+      // S10: the client-declared count; the server also counts with a resume token.
+      fileCount: total,
       resumeToken: resumeToken.current ?? undefined,
       turnstileToken,
     })

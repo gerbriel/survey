@@ -60,6 +60,8 @@ export type SubmitResponse =
       ok: true
       responseId: string
       resumeToken?: string
+      /** S4: the idempotency key was replayed; no resume secret is returned. */
+      replayed?: boolean
       score?: { value: number; max: number }
       endingId?: string | null
     }
@@ -73,6 +75,8 @@ export type UploadRequest = {
   name: string
   size: number
   mime: string
+  /** S10: files already on this response, as the client counts them. */
+  fileCount?: number
   resumeToken?: string
   turnstileToken?: string
 }
@@ -137,7 +141,9 @@ export function fileIdsFromAnswers(answers: Record<string, unknown>): string[] {
 
 /** URL params that never become hidden fields or metadata. */
 export const RESERVED_PARAMS = new Set(['r', 't'])
-const PARAM_RE = /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$/
+/** I8: hidden field key pattern, shared with the server's zod check in src/lib/public/submit.ts. */
+export const HIDDEN_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/
+const PARAM_RE = HIDDEN_KEY_RE
 export const MAX_HIDDEN_PARAMS = 50
 export const MAX_HIDDEN_VALUE = 500
 

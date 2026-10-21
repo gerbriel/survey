@@ -81,7 +81,7 @@ All four live in `src/lib/supabase/`. Each returns a branded type (`UserClient`,
 | `createAdminClient()` | `admin.ts` | service role, bypasses RLS | server-only library code under `src/lib` (for example `src/lib/public/*`, cron helpers) after Turnstile, `CRON_SECRET`, or an explicit auth check | anything under `src/app`, client components |
 | `updateSession(req, headers)` | `proxy.ts` | refreshes the member session | `src/proxy.ts`, dashboard branch only | everything else |
 
-Cookie rules (`cookies.ts`, unit tested): no `Domain` attribute ever (host-only to `DASHBOARD_HOST`), `Path=/`, `SameSite=Lax`, `Secure` everywhere except `next dev`. Every write goes through `hostOnlyCookieOptions`, which strips a `Domain` even if the library passes one.
+Cookie rules (`cookies.ts`, unit tested): no `Domain` attribute ever (host-only to `DASHBOARD_HOST`), `Path=/`, `SameSite=Lax`, `Secure` everywhere except `next dev`. Every write goes through `hostOnlyCookieOptions`, which strips a `Domain` (and any `name`) even if the library passes one. In production the auth cookie is named `__Host-sb-auth` through `cookieOptions.name` (S12), so a parent-domain cookie tossed from `PUBLIC_HOST` cannot shadow it; dev keeps the library default because `__Host-` needs `Secure`.
 
 ESLint enforces the matrix: under `src/app/**` the admin client and the raw `@supabase/supabase-js` and `@supabase/ssr` imports are refused (type-only imports are allowed); under `src/app/(public)/**` the server, browser and proxy clients and `src/lib/auth` are refused too. This tightens rule 3 above: route handlers reach the service role through a server-only module in `src/lib`, not by importing `admin.ts` themselves.
 
@@ -193,6 +193,14 @@ From `docs/06-build-plan.md`. An agent writes only inside its rows. Any file not
 | `vercel.json` | Phase 4 |
 
 Files Phase 0 created outside the table: `src/lib/hosts.ts` (host routing rules), `src/lib/request-context.ts` (`getNonce`, `getHostKind`), `src/app/(public)/%5Fhome/page.tsx`, `src/app/(dashboard)/layout.tsx`, `src/app/(dashboard)/page.tsx`, `src/app/(dashboard)/dev/renderer/page.tsx` (1C fills it), `src/app/globals.css`, `tests/unit/hosts.test.ts`. Phase 0 owns them until a later phase takes them over.
+
+## Security review rules (doc 07)
+
+- Client IP comes only from `clientIp()` in `src/lib/public/http.ts`: `x-vercel-forwarded-for`, then `x-real-ip`, then the LAST `x-forwarded-for` entry. Rate limit keys hash it with `hashIp`, which reduces IPv6 to /64 (S9, R17).
+- Public routes check per-IP buckets, then Turnstile, then any shared per-survey bucket (S2, R17).
+- The public page keeps no answers in browser storage: only the resume token and the respondent id (S3, R16). GTM and custom scripts load only when `raw_script_pixels_allowed` is true, decided by pixel type.
+- Dashboard pages and actions that take an id from the URL call `assertBelongsToWorkspace` in `src/lib/scope.ts` before other queries (D-15).
+- `vercel.json` schedules the three cron routes; Vercel Cron calls the production domain, which must be `DASHBOARD_HOST` (the proxy 404s other hosts).
 
 ## Looks wrong but is deliberate
 

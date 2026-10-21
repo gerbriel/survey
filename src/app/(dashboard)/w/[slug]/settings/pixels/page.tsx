@@ -18,7 +18,8 @@ export default async function PixelsPage({ params }: { params: Promise<{ slug: s
     listPixels(supabase, { workspaceId: workspace.id }),
     getEffectiveLimits(supabase, { workspaceId: workspace.id }),
   ])
-  const rawAllowed = limits.ok && limits.data ? limits.data.raw_script_pixels_allowed : true
+  // S3 (R16): fails closed; script pixels are off unless effective_limits says otherwise.
+  const rawAllowed = limits.ok && limits.data ? limits.data.raw_script_pixels_allowed : false
   const canEdit = memberCan(role, 'admin', workspace)
   const rows: PixelView[] = (pixels.ok ? pixels.data : []).map((p) => ({
     id: p.id,

@@ -1,20 +1,26 @@
 import { ImageResponse } from 'next/og'
-import { ogCardFor } from '@/lib/public/og'
+import { ogCardForRequest } from '@/lib/public/og'
 
 /**
  * Generated link preview, 1200x630 (doc 02 section 4): survey title plus the
  * workspace logo and name. Used when a survey has no uploaded OG image.
- * Immutable per published version, so browsers and the CDN cache it for a year.
+ * The image is immutable per published version; cached for a day so a survey
+ * moved back to draft or closed stops showing its card soon after (L7).
  */
 
 export const dynamic = 'force-dynamic'
 
 const SIZE = { width: 1200, height: 630 }
 
-export async function GET(_req: Request, ctx: { params: Promise<{ versionId: string }> }): Promise<Response> {
+export async function GET(req: Request, ctx: { params: Promise<{ versionId: string }> }): Promise<Response> {
   const { versionId } = await ctx.params
-  const card = await ogCardFor(versionId)
-  if (!card) return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } })
+  // L7: state checked by key, rate limited, misses cached for at most 60 seconds.
+  const found = await ogCardForRequest(req, versionId)
+  if (found.kind === 'rate_limited') {
+    return new Response('Too many requests', { status: 429, headers: { 'cache-control': 'no-store', 'retry-after': String(found.retryAfter) } })
+  }
+  if (found.kind === 'not_found') return new Response('Not found', { status: 404, headers: { 'cache-control': 'public, max-age=60' } })
+  const card = found.card
   const title = card.title.length > 120 ? `${card.title.slice(0, 117)}...` : card.title
   return new ImageResponse(
     (
@@ -42,6 +48,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ versionId: str
         <div style={{ fontSize: 28, color: '#57534e' }}>Survey</div>
       </div>
     ),
-    { ...SIZE, headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
+    { ...SIZE, headers: { 'cache-control': 'public, max-age=86400' } },
   )
 }

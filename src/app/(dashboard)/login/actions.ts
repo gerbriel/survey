@@ -3,13 +3,7 @@
 import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
-import {
-  claimInvitesFromCookies,
-  LOGIN_PATH,
-  PLATFORM_INVITE_COOKIE,
-  postSignInPath,
-  WORKSPACE_INVITE_COOKIE,
-} from '@/lib/auth'
+import { claimInvitesFromCookies, LOGIN_PATH, postSignInPath, signupInviteGuard } from '@/lib/auth'
 import { createServerClient } from '@/lib/supabase/server'
 import { getProfile } from '@/lib/db/profiles'
 import { failure, formToObject, fromZodError, type ActionState } from '@/lib/admin/forms'
@@ -46,19 +40,19 @@ export async function signInWithPassword(_prev: ActionState, form: FormData): Pr
 }
 
 /**
- * Sign-up appears only with an invite cookie (UX only: a bare API signup
- * still lands in pending). The tokens also ride the signup metadata so the
- * handle_new_user trigger can claim them.
+ * S1 (R18): password sign-up requires an invite token in the invite cookie;
+ * without one the action refuses and points to the invite link or Google.
+ * The tokens ride the signup metadata so the handle_new_user trigger can
+ * claim them; SQL (0019) never claims a platform invite by email match for a
+ * password signup, so a bare API signup still lands in pending.
  */
 export async function signUpWithPassword(_prev: ActionState, form: FormData): Promise<ActionState> {
   const parsed = credentials.safeParse(formToObject(form))
   if (!parsed.success) return fromZodError(parsed.error)
   const store = await cookies()
-  const workspaceToken = store.get(WORKSPACE_INVITE_COOKIE)?.value
-  const platformToken = store.get(PLATFORM_INVITE_COOKIE)?.value
-  if (!workspaceToken && !platformToken) {
-    return failure('Open your invite link first, then create your account.')
-  }
+  const guard = signupInviteGuard((name) => store.get(name)?.value)
+  if (!guard.ok) return failure(guard.message)
+  const { workspaceToken, platformToken } = guard
   const supabase = await createServerClient()
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,

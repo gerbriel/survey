@@ -20,11 +20,12 @@ import { buildXlsx, XLSX_MIME } from '@/lib/exports/xlsx'
  *             file streams back directly; above that an export_jobs row is
  *             created, the file is written to the private exports bucket, and
  *             the answer is JSON { job_id, url } with a 1 hour signed URL.
- * GET ?format=csv|xlsx[&kind=responses|summary][&labels=1][&<analytics filters>]
- *   the same export as a plain link (the response inbox links here). A large
- *   export answers 303 to the signed URL once the file is written.
+ * POST form fields kind, format, labels, query (a plain HTML form, the
+ *   response inbox uses one): the same export answered as a file download;
+ *   a large export answers 303 to the signed URL once the file is written.
  * GET ?job={id}
- *   status of an earlier job and a fresh signed URL when done.
+ *   status of an earlier job and a fresh signed URL when done. D-05: GET
+ *   never starts an export, so a cross-site link or window.open cannot.
  *
  * Every export writes activity_log with actor, scope, filters and row count.
  */
@@ -61,6 +62,20 @@ function json(data: unknown, status = 200) {
 export async function POST(req: Request, { params }: Ctx) {
   const { slug, id } = await params
   if (!sameOrigin(req)) return json({ error: 'forbidden' }, 403)
+  const type = (req.headers.get('content-type') ?? '').toLowerCase()
+  if (type.startsWith('application/x-www-form-urlencoded') || type.startsWith('multipart/form-data')) {
+    // D-05: the inbox's form post, answered as a download.
+    const form = await req.formData().catch(() => null)
+    if (!form) return json({ error: 'invalid_input' }, 400)
+    const parsed = body.safeParse({
+      kind: String(form.get('kind') ?? 'responses'),
+      format: String(form.get('format') ?? 'csv'),
+      labels: form.get('labels') === '1',
+      query: String(form.get('query') ?? ''),
+    })
+    if (!parsed.success) return json({ error: 'invalid_input' }, 400)
+    return runExport(slug, id, parsed.data, 'link')
+  }
   const parsed = body.safeParse(await req.json().catch(() => null))
   if (!parsed.success) return json({ error: 'invalid_input' }, 400)
   return runExport(slug, id, parsed.data, 'json')
@@ -157,22 +172,11 @@ async function runExport(slug: string, id: string, input: z.output<typeof body>,
   return json({ job_id: job.data.id, status: 'done', url: done.data.url, rows: done.data.rows })
 }
 
-const LINK_KEYS = new Set(['format', 'kind', 'labels', 'job'])
-
 export async function GET(req: Request, { params }: Ctx) {
-  const { slug, id } = await params
+  const { slug } = await params
   const sp = new URL(req.url).searchParams
-  if (!sp.has('job')) {
-    const query = new URLSearchParams([...sp.entries()].filter(([k]) => !LINK_KEYS.has(k))).toString()
-    const parsed = body.safeParse({
-      kind: sp.get('kind') ?? 'responses',
-      format: sp.get('format') ?? 'csv',
-      labels: sp.get('labels') === '1',
-      query,
-    })
-    if (!parsed.success) return json({ error: 'invalid_input' }, 400)
-    return runExport(slug, id, parsed.data, 'link')
-  }
+  // D-05: GET is the job status poll only; exports start with POST.
+  if (!sp.has('job')) return json({ error: 'method_not_allowed' }, 405)
   const m = await requireMember(slug, 'viewer')
   const jobId = sp.get('job') ?? ''
   const job = await getExportJob(m.supabase, { jobId })

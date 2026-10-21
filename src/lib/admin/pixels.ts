@@ -43,8 +43,20 @@ export function isRawScriptType(type: PixelType): boolean {
   return type === 'gtm' || type === 'custom_script'
 }
 
+/** S3 (R16): shown on the pixel type picker for gtm and custom_script. */
 export const RAW_SCRIPT_WARNING =
-  'This code runs on every public survey in this workspace with full access to the page, including what respondents type. Only paste code from a vendor you trust.'
+  'This code runs on every public survey in this workspace with full access to the page, including what respondents type. All workspaces share the public survey address, so it also runs next to other workspaces\' surveys a respondent has open in the same browser and can call their public endpoints. Only paste code from a vendor you trust.'
+
+/** S3 (R16): shown with the raw_script_pixels_allowed toggle on the platform admin limits page. */
+export const RAW_SCRIPT_EXPOSURE =
+  'Turning this on lets the workspace load Google Tag Manager containers and custom scripts on its public surveys. That code can run anything. Every workspace shares one public survey address, so a script added here runs on the same origin as every other workspace\'s public surveys: in a browser that has another workspace\'s survey open or partly answered, it can read that page\'s browser storage, such as resume links and consent choices, and call that survey\'s public endpoints. Turn it on only for a workspace whose admins you trust with that access. Separate public addresses per workspace are planned for v2.'
+
+/** S3 (R16): kill switch state for the pixel type picker. */
+export function rawScriptStateText(rawAllowed: boolean): string {
+  return rawAllowed
+    ? 'Script pixels (Google Tag Manager and custom scripts) are turned on for this workspace by a platform admin.'
+    : 'Script pixels (Google Tag Manager and custom scripts) are turned off for this workspace. Only a platform admin can turn them on.'
+}
 
 export type ScriptPart = {
   kind: 'script'

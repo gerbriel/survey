@@ -286,16 +286,18 @@ export function listAnswersFor(client: UserClient, input: z.input<typeof answers
   )
 }
 
-/** Admin (RLS). Files cascade and are queued for Storage deletion by trigger. */
+/**
+ * Admin. L-13 (0019): delete_response(p_response_id) checks admin on the
+ * response's own workspace, logs the delete, adjusts complete_count and the
+ * contact's response_count; files cascade and are queued for Storage
+ * deletion by trigger. A direct table delete removes nothing since 0019.
+ */
 export function deleteResponse(client: UserClient, input: z.input<typeof responseIdInput>) {
   return call(
     responseIdInput,
     input,
-    (v) => client.from('responses').delete().eq('id', v.responseId).select('id'),
-    (rows) => {
-      if (!rows || rows.length === 0) throw new Error('permission_denied')
-      return undefined
-    },
+    (v) => client.rpc('delete_response', { p_response_id: v.responseId }),
+    () => undefined,
   )
 }
 

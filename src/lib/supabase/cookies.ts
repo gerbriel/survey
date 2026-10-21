@@ -16,9 +16,31 @@ export function isDevRuntime(nodeEnv: string | undefined = process.env.NODE_ENV)
   return nodeEnv === 'development'
 }
 
+/**
+ * S12 (public M4): the auth cookie name in production. Browsers accept a
+ * `__Host-` cookie only when it is Secure, has Path=/ and no Domain, so a
+ * script on PUBLIC_HOST cannot toss a parent-domain cookie with this name
+ * into DASHBOARD_HOST. @supabase/ssr 0.12 takes the name through
+ * `cookieOptions.name` (it becomes the storage key, so chunks are
+ * `__Host-sb-auth.0`, `.1` and the PKCE verifier `__Host-sb-auth-code-verifier`).
+ * Dev on plain http keeps the default name, since `__Host-` needs Secure.
+ * Changing the name signs everyone out once at deploy.
+ */
+export const HOST_AUTH_COOKIE_NAME = '__Host-sb-auth'
+
+export function authCookieName(nodeEnv: string | undefined = process.env.NODE_ENV): string | undefined {
+  return nodeEnv === 'production' ? HOST_AUTH_COOKIE_NAME : undefined
+}
+
+/** Attributes for every auth cookie write (no name). */
+function authCookieAttributes(nodeEnv: string | undefined): CookieOptions {
+  return { path: '/', sameSite: 'lax', secure: !isDevRuntime(nodeEnv) }
+}
+
 /** Options handed to @supabase/ssr as `cookieOptions`. */
 export function authCookieOptions(nodeEnv: string | undefined = process.env.NODE_ENV): CookieOptionsWithName {
-  return { path: '/', sameSite: 'lax', secure: !isDevRuntime(nodeEnv) }
+  const name = authCookieName(nodeEnv)
+  return name ? { name, ...authCookieAttributes(nodeEnv) } : authCookieAttributes(nodeEnv)
 }
 
 /**
@@ -31,7 +53,10 @@ export function hostOnlyCookieOptions(
   options: CookieOptions | undefined,
   nodeEnv: string | undefined = process.env.NODE_ENV,
 ): CookieOptions {
-  const { domain: _dropped, ...rest } = options ?? {}
+  // Next's cookies.set spreads options after the name, so a `name` here would
+  // rename every chunk; it is dropped along with Domain.
+  const { domain: _dropped, name: _name, ...rest } = (options ?? {}) as CookieOptionsWithName
   void _dropped
-  return { ...rest, ...authCookieOptions(nodeEnv) }
+  void _name
+  return { ...rest, ...authCookieAttributes(nodeEnv) }
 }

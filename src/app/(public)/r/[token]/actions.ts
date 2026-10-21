@@ -2,6 +2,7 @@
 
 import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
+import { clientIp } from '@/lib/public/http'
 import { allowPasswordAttempt, isShareToken, loadSharedReport, sealPassword, shareCookieName, shareCookieSecret } from '@/lib/analytics/share'
 
 /**
@@ -14,7 +15,8 @@ export async function unlockSharedReport(token: string, formData: FormData): Pro
   if (!isShareToken(token)) redirect('/')
   const password = String(formData.get('password') ?? '').slice(0, 200)
   const h = await headers()
-  const ip = (h.get('x-forwarded-for') ?? '').split(',')[0]?.trim() || h.get('x-real-ip') || 'unknown'
+  // S9 (R17, F1): the one shared client IP reader, never the first x-forwarded-for entry.
+  const ip = clientIp(h)
   if (!(await allowPasswordAttempt(token, ip))) redirect(`/r/${token}?e=rate`)
   const ok = password ? await loadSharedReport(token, password) : null
   if (!ok) redirect(`/r/${token}?e=wrong`)

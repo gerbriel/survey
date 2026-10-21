@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { AdminClient } from '@/lib/supabase/types'
 import { adminMembershipsByUser, adminWorkspaceMembers, insertPlatformAudit, type AdminMemberRow, type UserMembership } from '@/lib/db/admin'
 import { fail, makeDbError, ok, toDbError, type DbResult } from '@/lib/db/errors'
+import { getProfile } from '@/lib/db/profiles'
+import { resetLinkRefusal } from './reset-guard'
 
 export type { AdminMemberRow, UserMembership }
 
@@ -31,9 +33,9 @@ export type AuthUserSummary = {
   providers: string[]
 }
 
-async function adminClient(): Promise<{ admin: AdminClient; actorId: string }> {
+async function adminClient(): Promise<{ admin: AdminClient; actorId: string; supabase: Awaited<ReturnType<typeof requirePlatformAdmin>>['supabase'] }> {
   const ctx = await requirePlatformAdmin()
-  return { admin: createAdminClient(), actorId: ctx.user.id }
+  return { admin: createAdminClient(), actorId: ctx.user.id, supabase: ctx.supabase }
 }
 
 async function audit(admin: AdminClient, actorId: string, action: string, targetId: string): Promise<void> {
@@ -74,19 +76,35 @@ export async function workspaceMembersForAdmin(workspaceId: string): Promise<DbR
 
 /**
  * Admin-assisted password reset (doc 05 section 4.3). Returns the link once;
- * it is never stored. Audited as password_reset.mint.
+ * it is never stored or logged.
+ *
+ * S6 (R18, D-02): refuses the caller themself and any platform admin (read
+ * under the caller's RLS session; an unreadable profile also refuses). The
+ * platform_audit_log row (password_reset.mint, target id only, never the
+ * link) is written BEFORE the Auth admin API is called; if that insert fails
+ * nothing is minted. The link goes only into the return value, which the
+ * action hands to the acting admin's response.
  */
 export async function mintPasswordResetLink(userId: string): Promise<DbResult<{ link: string; email: string }>> {
   const uid = z.guid().parse(userId)
-  const { admin, actorId } = await adminClient()
+  const { admin, actorId, supabase } = await adminClient()
   try {
+    const target = await getProfile(supabase, { userId: uid })
+    if (!target.ok) return fail(makeDbError('not_found'))
+    const refusal = resetLinkRefusal(actorId, uid, target.data)
+    if (refusal) return fail(makeDbError(refusal))
     const user = await admin.auth.admin.getUserById(uid)
     if (user.error || !user.data.user) return fail(makeDbError('not_found'))
     const email = user.data.user.email
-    if (!email) return fail(makeDbError('invalid_state', 'This user has no email address.'))
+    if (!email) return fail(makeDbError('invalid_state'))
+    // S6: audit first, fail closed.
+    const audited = await insertPlatformAudit(admin, { actorId, action: 'password_reset.mint', targetType: 'user', targetId: uid })
+    if (!audited.ok) {
+      console.error('platform audit write failed; reset link not minted', audited.error.code)
+      return fail(makeDbError('unknown'))
+    }
     const { data, error } = await admin.auth.admin.generateLink({ type: 'recovery', email })
     if (error || !data.properties?.action_link) return fail(error ? toDbError(error) : makeDbError('unknown'))
-    await audit(admin, actorId, 'password_reset.mint', uid)
     return ok({ link: data.properties.action_link, email })
   } catch (e) {
     return fail(toDbError(e))

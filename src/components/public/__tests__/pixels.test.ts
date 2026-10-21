@@ -30,6 +30,16 @@ describe('selectPixels', () => {
     expect(ids(selectPixels(ROWS, { hostKind: 'public', rawScriptAllowed: false }))).toEqual(['p1', 'p2'])
   })
 
+  it('S3 (R16): the kill switch is decided by the type column, never by parsed content', () => {
+    // A gtm row with custom_script shaped content and a custom_script row with gtm shaped content stay blocked.
+    const rows: PixelRow[] = [
+      { id: 'g', type: 'gtm', value: 'GTM-ABCD12', parsed: { version: 1, parts: [] } },
+      { id: 'c', type: 'custom_script', value: 'GTM-ABCD12', parsed: ROWS[3]!.parsed },
+    ]
+    expect(selectPixels(rows, { hostKind: 'public', rawScriptAllowed: false })).toEqual([])
+    expect(ids(selectPixels(rows, { hostKind: 'public', rawScriptAllowed: true }))).toEqual(['g', 'c'])
+  })
+
   it('re-validates values and ignores unknown types and duplicates', () => {
     const rows: PixelRow[] = [
       { id: 'a', type: 'ga4', value: "G-1');alert(1)//" },
@@ -97,9 +107,18 @@ describe('parseCustomScript', () => {
       kind: 'script',
       src: 'https://cdn.example.org/a.js',
       code: null,
-      attrs: { async: true, defer: true, type: 'module', id: 'vendor-loader', 'data-account': '42' },
+      attrs: { async: true, defer: true, type: 'module', id: 'vendor-loader', 'data-account': '42', crossorigin: 'anonymous' },
     })
     expect(allowScriptAttrs({ type: 'text/html', id: '1bad"x' })).toEqual({})
+  })
+
+  it('S3 (I1): accepts the settings attribute names crossorigin, referrerpolicy and charset with safe values', () => {
+    expect(allowScriptAttrs({ crossorigin: 'use-credentials', referrerpolicy: 'No-Referrer', charset: 'utf-8' })).toEqual({
+      crossorigin: 'use-credentials',
+      referrerpolicy: 'no-referrer',
+      charset: 'utf-8',
+    })
+    expect(allowScriptAttrs({ crossorigin: 'x"y', referrerpolicy: 'everything', charset: 'utf 8;x' })).toEqual({})
   })
 
   it('ignores the pre-0018 reader shape and documents without a script', () => {

@@ -192,6 +192,13 @@ function checkRule(c: Checker, v: unknown, i: number) {
   }
 }
 
+/** L5: a CSS hex color, #rgb or #rrggbb, nothing else (no `;`, no url()). */
+export const HEX_COLOR_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i
+
+export function isHexColor(v: unknown): v is string {
+  return typeof v === 'string' && HEX_COLOR_RE.test(v)
+}
+
 /** Full shape check of a current-version definition. Returns issue strings. */
 export function checkDefinitionShape(v: unknown): string[] {
   const c = new Checker()
@@ -208,7 +215,13 @@ export function checkDefinitionShape(v: unknown): string[] {
     if (s.quiz !== undefined) c.need(isObj(s.quiz) && isStr(s.quiz.score_calc_id) && isBool(s.quiz.show_correct_answers), 'settings.quiz', 'expected { score_calc_id, show_correct_answers }')
     if (s.randomize_pages !== undefined) c.need(isObj(s.randomize_pages) && Array.isArray(s.randomize_pages.page_ids), 'settings.randomize_pages', 'expected { page_ids }')
   }
-  c.need(isObj(d.theme), 'theme', 'expected object')
+  if (c.need(isObj(d.theme), 'theme', 'expected object')) {
+    // L5: theme colors reach inline CSS; only #rgb or #rrggbb is accepted.
+    const colors = (d.theme as Obj).colors
+    if (colors !== undefined && c.need(isObj(colors), 'theme.colors', 'expected object')) {
+      for (const [k, v] of Object.entries(colors as Obj)) c.need(isHexColor(v), `theme.colors.${k}`, 'expected #rgb or #rrggbb')
+    }
+  }
   if (c.need(Array.isArray(d.pages), 'pages', 'expected array')) {
     ;(d.pages as unknown[]).forEach((pg, i) => {
       const p = `pages[${i}]`

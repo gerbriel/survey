@@ -13,7 +13,8 @@ export type PixelRow = { id: string; type: string; value: string; parsed?: unkno
 
 /**
  * One part of a custom_script pixel as rendered. `attrs` holds only allow
- * listed attributes (async, defer, type, id, data-*); src is its own field.
+ * listed attributes (async, defer, type, id, crossorigin, referrerpolicy,
+ * charset, data-*); src is its own field.
  */
 export type CustomScriptPart =
   | { kind: 'script'; src: string | null; code: string | null; attrs: Record<string, string | true> }
@@ -33,11 +34,30 @@ const VALUE_RE = {
 
 const SCRIPT_TYPES = new Set(['text/javascript', 'application/javascript', 'module'])
 const DATA_ATTR = /^data-[a-z0-9][a-z0-9._:-]{0,63}$/
+// S3 (I1): same attribute names the settings parser accepts (src/lib/admin/pixels.ts ALLOWED_ATTRS).
+const CROSSORIGIN = new Set(['anonymous', 'use-credentials', ''])
+const REFERRER_POLICIES = new Set([
+  'no-referrer',
+  'no-referrer-when-downgrade',
+  'origin',
+  'origin-when-cross-origin',
+  'same-origin',
+  'strict-origin',
+  'strict-origin-when-cross-origin',
+  'unsafe-url',
+])
+
+/**
+ * S3 (R16): pixel types that can load arbitrary code. Both load only while
+ * effective_limits.raw_script_pixels_allowed is true, decided by the type
+ * column alone, never by parsed content.
+ */
+export const RAW_SCRIPT_PIXEL_TYPES: ReadonlySet<string> = new Set(['gtm', 'custom_script'])
 const MAX_CODE = 10_000
 
 /**
  * Allow list for script attributes: async, defer, type (JavaScript types
- * only), id, and data-*. Event handlers (on*), nonce, src (a field of its
+ * only), id, crossorigin, referrerpolicy, charset, and data-*. Event handlers (on*), nonce, src (a field of its
  * own) and every other attribute are dropped. Values are strings up to 500
  * characters, or true for a bare attribute.
  */
@@ -53,6 +73,14 @@ export function allowScriptAttrs(raw: unknown): Record<string, string | true> {
       if (typeof value === 'string' && SCRIPT_TYPES.has(value.toLowerCase())) out.type = value.toLowerCase()
     } else if (name === 'id') {
       if (typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_:.-]{0,99}$/.test(value)) out.id = value
+    } else if (name === 'crossorigin') {
+      // S3 (I1): matches the settings allow list; only the two CORS modes.
+      const v = value === true ? '' : value.toLowerCase()
+      if (CROSSORIGIN.has(v)) out.crossorigin = v === '' ? 'anonymous' : v
+    } else if (name === 'referrerpolicy') {
+      if (typeof value === 'string' && REFERRER_POLICIES.has(value.toLowerCase())) out.referrerpolicy = value.toLowerCase()
+    } else if (name === 'charset') {
+      if (typeof value === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(value)) out.charset = value
     } else if (DATA_ATTR.test(name)) {
       out[name] = value
     }
@@ -113,16 +141,17 @@ export function selectPixels(
   for (const r of rows) {
     if (!r || typeof r.id !== 'string' || excluded.has(r.id) || seen.has(r.id)) continue
     seen.add(r.id)
+    // S3 (R16): one kill switch for gtm and custom_script, by the type column.
+    if (RAW_SCRIPT_PIXEL_TYPES.has(r.type) && !opts.rawScriptAllowed) continue
     switch (r.type) {
       case 'ga4':
       case 'meta':
         if (VALUE_RE[r.type].test(r.value)) out.push({ id: r.id, type: r.type, value: r.value })
         break
       case 'gtm':
-        if (opts.rawScriptAllowed && VALUE_RE.gtm.test(r.value)) out.push({ id: r.id, type: 'gtm', value: r.value })
+        if (VALUE_RE.gtm.test(r.value)) out.push({ id: r.id, type: 'gtm', value: r.value })
         break
       case 'custom_script': {
-        if (!opts.rawScriptAllowed) break
         const parts = parseCustomScript(r.parsed)
         if (parts.length > 0) out.push({ id: r.id, type: 'custom_script', parts })
         break

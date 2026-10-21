@@ -71,7 +71,12 @@ export async function affected<D extends unknown[] | null>(q: PromiseLike<Res<D>
 
 /** Escape a user string for a PostgREST ilike pattern. */
 export function ilikePattern(s: string): string {
-  return `%${s.replace(/[\\%_,()]/g, (c) => `\\${c}`)}%`
+  return `%${ilikeEscape(s)}%`
+}
+
+/** D-18: `_` and `%` (and the escape char) escaped, for a case-insensitive exact ilike match. */
+export function ilikeEscape(s: string): string {
+  return s.replace(/[\\%_,()]/g, (c) => `\\${c}`)
 }
 
 /** jsonb columns that are NOT NULL; the generated type says NonNullable<Json>. */
@@ -106,3 +111,17 @@ export async function readAll<T>(page: (from: number, to: number) => PageResult<
     return fail(toDbError(e))
   }
 }
+
+/**
+ * D-17: a relative object name in the public-assets bucket, checked at write
+ * time: no scheme, no leading slash, no `..` segment, no backslash, only
+ * path-safe characters. Absolute URLs are refused, so a stored path can never
+ * point a respondent's browser at a third-party host.
+ */
+export const ASSET_OBJECT_NAME_RE = /^(?!\/)(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._\-/]*$/
+
+export function isAssetObjectName(path: string): boolean {
+  return path.length <= 500 && ASSET_OBJECT_NAME_RE.test(path) && !path.includes('//')
+}
+
+export const assetObjectName = z.string().max(500).refine(isAssetObjectName, 'Asset paths must be object names in the public assets bucket.')

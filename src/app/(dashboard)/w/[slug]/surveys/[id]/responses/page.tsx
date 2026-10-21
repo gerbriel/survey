@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
-import { LinkButton } from '@/components/crm/LinkButton'
+import { Button } from '@/components/ui/Button'
 import { InboxFilters } from '@/components/responses/InboxFilters'
 import { InboxList } from '@/components/responses/InboxList'
-import { requireMember, roleAtLeast } from '@/lib/auth'
-import { getSurvey, listPublishedVersions } from '@/lib/db/surveys'
+import { assertBelongsToWorkspace } from '@/lib/scope'
+import { roleAtLeast } from '@/lib/auth'
+import { listPublishedVersions } from '@/lib/db/surveys'
 import { listInbox } from '@/lib/db/responses'
 import { fetchInboxRowAction } from './actions'
 
@@ -28,9 +28,10 @@ export default async function ResponsesPage({
 }) {
   const { slug, id } = await params
   const sp = await searchParams
-  const { supabase, role } = await requireMember(slug, 'viewer')
-  const survey = await getSurvey(supabase, { surveyId: id })
-  if (!survey.ok || !survey.data) notFound()
+  // D-15: the survey must belong to this workspace before any other query.
+  const scoped = await assertBelongsToWorkspace(slug, { surveyId: id })
+  const { supabase, role } = scoped.member
+  const survey = { ok: true as const, data: scoped.survey! }
   const versions = await listPublishedVersions(supabase, { surveyId: id, order: 'desc' })
   const versionList = versions.ok ? versions.data : []
 
@@ -86,10 +87,14 @@ export default async function ResponsesPage({
           </p>
         </div>
         {roleAtLeast(role, 'editor') ? (
-          // Phase 2E owns the export route; the inbox only links to it.
-          <LinkButton href={`/w/${slug}/surveys/${id}/analytics/export?format=csv`} prefetch={false}>
-            Export CSV
-          </LinkButton>
+          // D-05: the row-level export accepts POST only, so a cross-site link cannot start a job.
+          <form method="post" action={`/w/${slug}/surveys/${id}/analytics/export`}>
+            <input type="hidden" name="kind" value="responses" />
+            <input type="hidden" name="format" value="csv" />
+            <Button type="submit" variant="secondary">
+              Export CSV
+            </Button>
+          </form>
         ) : null}
       </header>
       <InboxFilters

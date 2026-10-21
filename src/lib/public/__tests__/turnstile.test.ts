@@ -68,10 +68,31 @@ describe('verifyTurnstile', () => {
       token: 't',
       ip: 'x',
       action: 'submit',
-      env: env({ TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA' }),
+      env: env({ TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA', VERCEL_ENV: 'preview' }),
       fetchImpl: fakeFetch({ success: true, action: 'test', hostname: 'example.com' }) as never,
     })
     expect(r.ok).toBe(true)
+  })
+
+  it('L8: refuses the 1x and 2x test secrets in production without calling siteverify', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    for (const secret of ['1x0000000000000000000000000000000AA', '2x0000000000000000000000000000000AA']) {
+      const f = fakeFetch({ success: true })
+      for (const extra of [{ VERCEL_ENV: 'production' }, {}] as Record<string, string>[]) {
+        const r = await verifyTurnstile({ token: 't', ip: 'x', action: 'submit', env: env({ TURNSTILE_SECRET_KEY: secret, ...extra }), fetchImpl: f as never })
+        expect(r).toEqual({ ok: false, reason: 'test_secret_in_production' })
+      }
+      expect(f).not.toHaveBeenCalled()
+    }
+    // Explicit opt-in for a non-Vercel production build (e2e), never on Vercel production.
+    const ok = await verifyTurnstile({
+      token: 't',
+      ip: 'x',
+      action: 'submit',
+      env: env({ TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA', TURNSTILE_ALLOW_TEST_SECRET: '1' }),
+      fetchImpl: fakeFetch({ success: true }) as never,
+    })
+    expect(ok.ok).toBe(true)
   })
 
   it('requires a token', async () => {

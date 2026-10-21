@@ -27,6 +27,7 @@ import type { ContactFilters, ImportChunkResult } from '@/lib/db/contacts'
 import { normalizeEmail, normalizeTag } from '@/lib/crm/email'
 import { prepareImportRows, type ImportOptions } from '@/lib/crm/importServer'
 import { generateLinks } from '@/lib/crm/tokens'
+import { logExport } from '@/lib/db/exports'
 import { normalizePhone } from '@/lib/crm/phone'
 import type { Mapping, ImportRow } from '@/lib/crm/import'
 
@@ -70,7 +71,11 @@ export async function setCustomAction(
 ): Promise<ActionResult<Record<string, unknown>>> {
   const { supabase } = await requireMember(slug, 'editor')
   const r = await setContactCustom(supabase, { contactId, values })
-  if (!r.ok) return fail(r.error.detail ? `${r.error.message} (${r.error.detail})` : r.error.message)
+  if (!r.ok) {
+    // D-14: the canned message only; SQL detail stays in the server log.
+    if (r.error.detail) console.error('set_contact_custom failed', r.error.code, r.error.detail)
+    return fail(r.error.message)
+  }
   revalidatePath(`${base(slug)}/${contactId}`)
   return { ok: true, data: r.data }
 }
@@ -279,5 +284,19 @@ export async function generateLinksAction(
   const { supabase, workspace } = await requireMember(slug, 'editor')
   const r = await generateLinks(supabase, { workspaceId: workspace.id, ...input })
   if (!r.ok) return fail(r.message)
+  // S8 (D-04): the personalized link CSV is an export of contact data and
+  // tokens. log_export (0018) accepts only responses, contacts, summary and
+  // report, so it is logged as kind contacts with scope export = links.
+  // Fail closed: no CSV leaves without its activity row.
+  const log = await logExport(supabase, {
+    workspaceId: workspace.id,
+    kind: 'contacts',
+    scope: { export: 'links', survey_id: input.surveyId, max_responses: input.maxResponses },
+    rowCount: r.data.count,
+  })
+  if (!log.ok) {
+    console.error('link export log failed', log.error.code)
+    return fail('Could not record the export. Try again.')
+  }
   return { ok: true, data: r.data }
 }

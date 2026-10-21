@@ -28,7 +28,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ slu
   const role = await getMembership(ctx.supabase, { workspaceId: ws.data.id, userId: ctx.user.id })
   if (!role.ok || !memberCan(role.data, 'admin', ws.data)) return reply(403, 'Only owners and admins can change the logo.')
 
-  const len = Number(req.headers.get('content-length') ?? 0)
+  // D-18: Content-Length is required, so a chunked body is never buffered unchecked.
+  const declared = req.headers.get('content-length')
+  const len = declared === null ? NaN : Number(declared)
+  if (!Number.isFinite(len) || len <= 0) return reply(411, 'The upload must declare its size. Try again.')
   if (len > LOGO_MAX_BYTES + 64 * 1024) return reply(413, 'The logo must be 1 MB or smaller.')
 
   let file: File | null = null

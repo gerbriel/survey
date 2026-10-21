@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { notFound, redirect } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { EmptyState } from '@/components/ui'
 import { asDefinition } from '@/components/responses/answers'
 import { ContactHeader } from '@/components/crm/ContactHeader'
@@ -10,10 +10,10 @@ import { TagEditor } from '@/components/crm/TagEditor'
 import { Timeline } from '@/components/crm/Timeline'
 import { buildTimeline } from '@/components/crm/timelineData'
 import { memberName } from '@/components/crm/types'
-import { requireMember, roleAtLeast } from '@/lib/auth'
+import { assertBelongsToWorkspace } from '@/lib/scope'
+import { roleAtLeast } from '@/lib/auth'
 import {
   contactDuplicateCandidates,
-  getContact,
   listContactActivity,
   listContactsByIds,
   listFieldDefs,
@@ -37,11 +37,11 @@ const PREVIEW_RESPONSES = 30
 
 export default async function ContactDetailPage({ params }: { params: Promise<{ slug: string; contactId: string }> }) {
   const { slug, contactId } = await params
-  const { supabase, workspace, role, user } = await requireMember(slug, 'viewer')
+  // D-15: the contact must belong to this workspace before any other query.
+  const scoped = await assertBelongsToWorkspace(slug, { contactId })
+  const { supabase, workspace, role, user } = scoped.member
   const canEdit = roleAtLeast(role, 'editor') && !workspace.archived_at
-  const r = await getContact(supabase, { contactId })
-  if (!r.ok || !r.data || r.data.workspace_id !== workspace.id) notFound()
-  const contact = r.data
+  const contact = scoped.contact!
   // Merged contacts redirect to the survivor so old bookmarks keep working.
   if (contact.merged_into) redirect(`/w/${slug}/contacts/${contact.merged_into}`)
   if (contact.status === 'deleted') {

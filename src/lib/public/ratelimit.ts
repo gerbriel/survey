@@ -2,6 +2,7 @@ import 'server-only'
 import { createHmac } from 'node:crypto'
 import { rateLimitHit } from '@/lib/db/submission'
 import type { AdminClient } from '@/lib/supabase/types'
+import { rateKeyIp } from './http'
 
 /**
  * Postgres sliding-window rate limits (doc 02 section 5.2). The raw IP is
@@ -14,7 +15,8 @@ export type RateLimitRule = { bucket: string; window: string; windowSeconds: num
 
 /** Doc 02 section 5.2 table, plus the report and resume buckets. */
 export const RATE_LIMITS = {
-  submitCreate: { bucket: 'submit:create', window: '10 minutes', windowSeconds: 600, max: 10 },
+  // S9 (R17): sized for an office NAT, keyed by IP plus survey id; Turnstile is the real gate.
+  submitCreate: { bucket: 'submit:create', window: '10 minutes', windowSeconds: 600, max: 60 },
   submitSave: { bucket: 'submit:save', window: '1 minute', windowSeconds: 60, max: 60 },
   /** max is replaced by effective_limits(workspace_id).rate_limit_per_hour when known. */
   submitComplete: { bucket: 'submit:complete', window: '1 hour', windowSeconds: 3600, max: 20 },
@@ -24,6 +26,11 @@ export const RATE_LIMITS = {
   // Decision: resume lookups share the upload budget size; a resume token is a
   // 256-bit secret, so this only bounds load, not guessing.
   resume: { bucket: 'resume', window: '10 minutes', windowSeconds: 600, max: 30 },
+  // S11 (R17, public M3): the events beacon, per IP and per survey, ahead of the rid bucket.
+  eventsIp: { bucket: 'events_ip', window: '1 minute', windowSeconds: 60, max: 120 },
+  eventsSurvey: { bucket: 'events_survey', window: '1 minute', windowSeconds: 60, max: 10000 },
+  // L7: generated link previews, per IP.
+  og: { bucket: 'og', window: '1 minute', windowSeconds: 60, max: 60 },
 } as const satisfies Record<string, RateLimitRule>
 
 const DEV_SECRET = 'dev-only-rate-limit-secret'
@@ -46,9 +53,12 @@ export function utcDate(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10)
 }
 
-/** HMAC-SHA256(ip, secret + utcDate), first 16 bytes as 32 hex chars. */
+/**
+ * HMAC-SHA256(ip, secret + utcDate), first 16 bytes as 32 hex chars.
+ * S9 (R17): IPv6 is reduced to its /64 prefix before hashing (rateKeyIp).
+ */
 export function hashIp(ip: string, secret: string, now: Date = new Date()): string {
-  return createHmac('sha256', secret + utcDate(now)).update(ip).digest('hex').slice(0, 32)
+  return createHmac('sha256', secret + utcDate(now)).update(rateKeyIp(ip)).digest('hex').slice(0, 32)
 }
 
 export type RateCheck = { rule: RateLimitRule; key: string; max?: number }

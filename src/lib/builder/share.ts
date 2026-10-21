@@ -39,10 +39,15 @@ export const RESERVED_ALIASES = [
   'report', 'robots', 'favicon',
 ] as const
 
-/** Public URL for an object in the public-assets bucket. Accepts paths with or without the bucket prefix. */
+/**
+ * Public URL for an object in the public-assets bucket. Accepts paths with or
+ * without the bucket prefix. D-17: absolute URLs, schemes, protocol-relative
+ * paths and `..` segments are refused (null), never passed through.
+ */
 export function publicAssetUrl(supabaseUrl: string | undefined, path: string | null | undefined): string | null {
   if (!supabaseUrl || !path) return null
-  if (/^https?:\/\//.test(path)) return path
+  if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//') || path.includes('\\')) return null
   const clean = path.replace(/^\/+/, '').replace(/^public-assets\//, '')
+  if (clean.split('/').some((seg) => seg === '..' || seg === '.')) return null
   return `${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/public/public-assets/${clean.split('/').map(encodeURIComponent).join('/')}`
 }

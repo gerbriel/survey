@@ -36,7 +36,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const s = loaded.survey
   const title = s.og_title || s.title
   const description = s.og_description || (loaded.kind === 'open' ? introText(loaded.definition) : undefined)
-  const image = publicAssetUrl(s.og_image_path) ?? (s.version_id ? `/api/public/og/${s.version_id}` : null)
+  // L7: the card route checks the survey's state by key, so the key travels with the version id.
+  const image = publicAssetUrl(s.og_image_path) ?? (s.version_id ? `/api/public/og/${s.version_id}?k=${encodeURIComponent(key.toLowerCase())}` : null)
   return {
     metadataBase: new URL(publicOrigin()),
     title: s.title,

@@ -28,6 +28,7 @@ import {
   unarchiveWorkspace,
 } from '@/lib/db/workspaces'
 import { mintPasswordResetLink, setAuthBan } from '@/lib/admin/service'
+import { RESET_REFUSED_MESSAGE } from '@/lib/admin/reset-guard'
 import { inviteUrl } from '@/lib/admin/links'
 import { failure, formBool, formFields, fromDbError, fromZodError, success, type ActionState } from '@/lib/admin/forms'
 import { parseLimitsForm } from '@/lib/admin/limits-form'
@@ -188,7 +189,8 @@ export async function mintResetLink(_prev: ActionState, form: FormData): Promise
   const id = idFrom(form, 'userId')
   if (!id.success) return failure('Pick a user.')
   const r = await mintPasswordResetLink(id.data)
-  if (!r.ok) return fromDbError(r.error)
+  // S6 (R18): self and platform admin targets are refused before any link exists.
+  if (!r.ok) return r.error.code === 'not_authorized' ? failure(RESET_REFUSED_MESSAGE) : fromDbError(r.error)
   return success(`Reset link for ${r.data.email}. Copy it now: it is shown once and never stored.`, { link: r.data.link })
 }
 
