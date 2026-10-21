@@ -182,3 +182,14 @@ Product behavior:
 16. Surveys default to `noindex` (yes).
 
 Deferred to v2 unless a department is blocked: multi-language surveys, iframe embeds, department template packs, custom lead statuses, PDF report export, respondent self-service data export.
+
+## Running notes from the build
+
+Kept here so later phases and future sessions see them. Dated.
+
+- 2026-10-21, Phase 1A. `delete_survey` requires admin (doc 01) and doc 05's capability matrix was corrected to match. Deletion is destructive; editors do not get it.
+- 2026-10-21, Phase 1A. Docker is not installed on the build machine. Migrations and SQL tests were verified on a throwaway Homebrew Postgres 17 cluster with a Supabase shim (auth, storage, cron stubs). The real gate (`supabase db reset`, `pnpm test:sql` against the Supabase stack) has not run yet and must run before Phase 2 is declared done.
+- 2026-10-21, Phase 1A. `src/types/database.ts` will be generated from that stand-in cluster. Regenerate with `pnpm db:types` once Docker exists and diff it.
+- 2026-10-21, Phase 1A, for Phase 2D. The built-in "Follow-up due" contact view uses filter key `follow_up: "due"`, which is not yet in the TypeScript `ContactViewFilters` type. Add it when building contact views.
+- 2026-10-21, Phase 1A, for Phase 1D and 2C. SQL raises error codes as the exception message (`revision_conflict`, `lock_lost`, `server_only_key_in_public_definition: score`). `submit_response` takes one jsonb payload and returns snake_case keys. `apply_invites` returns `status` in {joined, already_member, activated, active, pending, invalid, disabled}. `resume_token_hash` is the sha256 hex of the token.
+- 2026-10-21, Phase 1B. question_key format is `^q_[a-z0-9]{8}$` everywhere (doc 01 wins over doc 03's snake_case mention). New questions use id equal to question_key.

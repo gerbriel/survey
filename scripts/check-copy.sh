@@ -10,7 +10,7 @@ EM=$(printf '\xe2\x80\x94')
 EN=$(printf '\xe2\x80\x93')
 
 targets=()
-for t in src docs README.md AGENTS.md; do
+for t in src docs supabase README.md AGENTS.md; do
   [ -e "$t" ] && targets+=("$t")
 done
 

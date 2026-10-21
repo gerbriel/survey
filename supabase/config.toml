@@ -118,10 +118,12 @@ file_size_limit = "100MiB"
 # [storage.image_transformation]
 # enabled = true
 
-# Buckets from doc 01 section 6. Phase 1A migration 0008 adds the storage
-# policies plus the private `exports` and `imports` buckets.
+# Buckets from doc 01 section 6. Migration 0008 inserts the same four rows
+# (so hosted projects get them from `supabase db push`) and owns the
+# storage.objects policies. Object names start with {workspace_id}/.
 
-# Workspace logos, OG images, theme assets. Public read; writes need editor.
+# Workspace logos, OG images, theme assets. Public read; writes need editor
+# (the top-level logo file needs admin).
 [storage.buckets.public-assets]
 public = true
 file_size_limit = "10MiB"
@@ -132,6 +134,26 @@ allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "image/gif"]
 [storage.buckets.response-files]
 public = false
 file_size_limit = "100MiB"
+allowed_mime_types = [
+  "image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf", "text/plain", "text/csv",
+  "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint", "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]
+
+# Large response and contact exports (doc 04 section 6.4). Private; written by
+# the service role, read by editors through 1 hour signed URLs, swept after 7 days.
+[storage.buckets.exports]
+public = false
+file_size_limit = "100MiB"
+allowed_mime_types = ["text/csv", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/json"]
+
+# Contact CSV imports (doc 04 section 1.5). Private; editor upload, service
+# role read, swept after 30 days.
+[storage.buckets.imports]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["text/csv", "text/plain"]
 
 [auth]
 enabled = true
@@ -346,8 +368,8 @@ allow_dynamic_registration = false
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
-# `per_worker` (default) — enables hot reload during local development.
-# `oneshot` — fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
+# `per_worker` (default) : enables hot reload during local development.
+# `oneshot` : fallback mode if hot reload causes issues (e.g. in large repos or with symlinks).
 policy = "per_worker"
 # Port to attach the Chrome inspector for debugging edge functions.
 inspector_port = 8083

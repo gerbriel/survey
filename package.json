@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint",
     "test": "vitest run",
-    "test:sql": "echo \"requires docker\" && echo \"TODO(Phase 1A): replace with supabase test db (pgTAP in supabase/tests)\" && exit 0",
+    "test:sql": "bash supabase/tests/run.sh",
     "check:copy": "bash scripts/check-copy.sh",
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types typescript --local > src/types/database.ts"

@@ -68,7 +68,7 @@ Why only counts: deletion must actually delete respondent data, but the org need
 | Export aggregate report (charts, summary CSV) | yes | yes | yes | yes |
 | Export row-level responses or contacts | no | yes | yes | yes |
 | Create, edit, publish, close surveys | no | yes | yes | yes |
-| Delete surveys | no | yes | yes | yes |
+| Delete surveys | no | no | yes | yes |
 | Edit, tag, merge contacts, add notes | no | yes | yes | yes |
 | Create personalized token links | no | yes | yes | yes |
 | Create report share links | no | yes | yes | yes |
