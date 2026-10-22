@@ -204,6 +204,7 @@ Files Phase 0 created outside the table: `src/lib/hosts.ts` (host routing rules)
 
 ## Looks wrong but is deliberate
 
+- **Redirects and origin checks never use `req.nextUrl.origin`.** Under `next dev` it is the bound address (`localhost:3000`), not the Host header, so a redirect built from it drops the `survey.` subdomain and lands on the unknown-host 404. Use `dashboardOrigin()` from `src/lib/auth/paths.ts`. Found on the first live Google sign-in, 2026-10-21.
 - **The dashboard host answers `/s/{key}` with a 302 to `PUBLIC_HOST/{key}`.** It is not a duplicate route. A pasted link with the wrong host must never 404, and the survey must never render on the dashboard origin. The query string is kept so `?t=` tokens and hidden fields survive. In `next dev` the redirect uses `http`; everywhere else `https`.
 - **Two different Content-Security-Policy headers.** The public policy has `'strict-dynamic'` and open `https:` for img, connect and frame because GTM and vendor snippets load and beacon anywhere; script execution is still nonce gated. The dashboard policy is self plus the Supabase origin only, no third-party scripts. Both are set in `src/proxy.ts`, one per response, never in `next.config.ts`, so they cannot intersect by accident. `'unsafe-eval'` appears only under `next dev`.
 - **The public host's `/` is a rewrite to `/_home`.** Two route groups cannot both define `/`, and the dashboard owns it. The folder is `(public)/%5Fhome` because a leading underscore can never be a slug or alias. Direct requests for `/_home` 404 on both hosts.

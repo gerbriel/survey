@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { getGoogleSignInUrl, loginPath, safeNextPath } from '@/lib/auth'
+import { dashboardOrigin } from '@/lib/auth/paths'
 
 /**
  * Starts Google sign-in. A GET route, not a server action, so the button is a
@@ -10,6 +11,6 @@ import { getGoogleSignInUrl, loginPath, safeNextPath } from '@/lib/auth'
 export async function GET(req: NextRequest) {
   const next = safeNextPath(req.nextUrl.searchParams.get('next'), '')
   const r = await getGoogleSignInUrl({ next: next || null })
-  if (!r.ok) return NextResponse.redirect(new URL(loginPath(next, 'oauth'), req.nextUrl.origin), 303)
+  if (!r.ok) return NextResponse.redirect(new URL(loginPath(next, 'oauth'), dashboardOrigin()), 303)
   return NextResponse.redirect(r.url, 303)
 }

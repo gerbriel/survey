@@ -1,3 +1,4 @@
+import { dashboardOrigin } from '@/lib/auth/paths'
 import { createHash } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getAuthContext } from '@/lib/auth'
@@ -18,7 +19,7 @@ function reply(status: number, message: string, ok = false) {
 export async function POST(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   // Same-origin only. SameSite=Lax already keeps the session cookie off cross-site POSTs.
   const origin = req.headers.get('origin')
-  if (origin && origin !== req.nextUrl.origin) return reply(403, 'Cross-origin upload refused.')
+  if (origin && origin !== dashboardOrigin()) return reply(403, 'Cross-origin upload refused.')
 
   const { slug } = await params
   const ctx = await getAuthContext()

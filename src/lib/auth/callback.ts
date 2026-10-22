@@ -16,6 +16,7 @@ import {
 } from './invite-cookies'
 import { loginPath } from './paths'
 import { postSignInPath, type ClaimOutcome } from './post-sign-in'
+import { dashboardOrigin } from './paths'
 
 /**
  * OAuth callback plumbing for src/app/api/auth/callback/route.ts (Phase 2A
@@ -78,7 +79,10 @@ export async function handleAuthCallback(req: NextRequest): Promise<NextResponse
   const url = req.nextUrl
   const next = url.searchParams.get('next')
   const code = url.searchParams.get('code')
-  const to = (path: string) => NextResponse.redirect(new URL(path, url.origin), 303)
+  // Under `next dev`, req.nextUrl.origin is the bound address (localhost:3000), not the
+  // Host header, so a redirect built from it drops the survey. subdomain. Always use the
+  // configured dashboard origin (found by the owner on the first live sign-in, 2026-10-21).
+  const to = (path: string) => NextResponse.redirect(new URL(path, dashboardOrigin()), 303)
 
   if (url.searchParams.get('error') || !code) return to(loginPath(next, 'oauth'))
 
