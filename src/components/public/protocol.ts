@@ -101,14 +101,6 @@ export type ResumeResponse =
     }
   | { ok: false; code: ErrorCode; retryAfter?: number }
 
-export type ReportRequest = {
-  slug: string
-  reason: 'spam' | 'phishing' | 'sensitive_data' | 'harassment' | 'illegal' | 'other'
-  details?: string
-  contact?: string
-  turnstileToken?: string
-  website: string
-}
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 const PENDING_ID_RE = new RegExp(`/pending/(${UUID})/`)

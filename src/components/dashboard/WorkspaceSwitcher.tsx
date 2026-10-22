@@ -11,9 +11,23 @@ export type SwitcherWorkspace = { slug: string; name: string; role: WorkspaceRol
 /**
  * Disclosure menu of the user's workspaces with role badges (doc 05 section
  * 4.4). Plain links, so middle click opens a second department in a new tab.
- * Archived workspaces sit behind "Show archived" (section 1.3).
+ * Archived workspaces sit behind "Show archived" (section 1.3). The admin
+ * header uses it with no current workspace, a button label, and links that
+ * land on the surveys list (`hrefSuffix`).
  */
-export function WorkspaceSwitcher({ current, workspaces }: { current: SwitcherWorkspace; workspaces: SwitcherWorkspace[] }) {
+export function WorkspaceSwitcher({
+  current,
+  workspaces,
+  label,
+  hrefSuffix = '',
+}: {
+  current?: SwitcherWorkspace
+  workspaces: SwitcherWorkspace[]
+  /** Button text when there is no current workspace. */
+  label?: string
+  /** Appended to /w/{slug}, for example '/surveys'. */
+  hrefSuffix?: string
+}) {
   const [open, setOpen] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const menuId = useId()
@@ -55,8 +69,8 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: SwitcherWo
           focusRing,
         )}
       >
-        <span className="truncate">{current.name}</span>
-        <span className="sr-only">, switch workspace</span>
+        <span className="truncate">{current?.name ?? label ?? 'Workspaces'}</span>
+        {current ? <span className="sr-only">, switch workspace</span> : null}
         <span aria-hidden="true" className="text-muted">
           &#9662;
         </span>
@@ -67,17 +81,18 @@ export function WorkspaceSwitcher({ current, workspaces }: { current: SwitcherWo
           className="absolute left-0 z-40 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-surface p-2 shadow-lg"
         >
           <p className="px-2 pb-1 text-xs font-medium text-muted">Your workspaces</p>
+          {list.length === 0 ? <p className="px-2 py-2 text-sm text-muted">You are not a member of any workspace yet.</p> : null}
           <ul className="max-h-72 overflow-y-auto">
             {list.map((w) => (
               <li key={w.slug}>
                 <Link
-                  href={`/w/${encodeURIComponent(w.slug)}`}
-                  aria-current={w.slug === current.slug ? 'page' : undefined}
+                  href={`/w/${encodeURIComponent(w.slug)}${hrefSuffix}`}
+                  aria-current={w.slug === current?.slug ? 'page' : undefined}
                   onClick={() => setOpen(false)}
                   className={cx(
                     'flex items-center justify-between gap-2 rounded px-2 py-2 text-sm hover:bg-surface-muted',
                     focusRing,
-                    w.slug === current.slug && 'font-semibold',
+                    w.slug === current?.slug && 'font-semibold',
                   )}
                 >
                   <span className="truncate">

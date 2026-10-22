@@ -11,14 +11,14 @@ Conventions from 559flawless: `src/proxy.ts` (Next 16's name for middleware), `u
 One organization domain, two fixed hostnames, both attached to the same Vercel project (R15):
 
 - `DASHBOARD_HOST` (placeholder `survey.example.org`): dashboard, sign in, admin, cron.
-- `PUBLIC_HOST` (placeholder `s.example.org`): public surveys, report abuse, privacy notice, public APIs.
+- `PUBLIC_HOST` (placeholder `s.example.org`): public surveys, privacy notice, public APIs.
 
 Nothing is per workspace. Previews and local dev map both through `DEV_HOST_MAP` (for example `s.localhost:3000=public`).
 
 | Host | Path | Who | Session | CSP |
 |---|---|---|---|---|
 | public | `/{slug}`, `/{alias}` | anyone | none exists | public (nonce plus `strict-dynamic`, pixels allowed) |
-| public | `/report`, `/privacy` | anyone | none exists | public, no pixels |
+| public | `/privacy` | anyone | none exists | public, no pixels |
 | public | `/api/public/*` | anyone | none exists | public |
 | public | `/` | anyone | none | neutral page, "Use the link you were given." |
 | dashboard | `/s/{key}` | anyone | ignored | 302 to `https://{PUBLIC_HOST}/{key}` (query string kept) |
@@ -29,12 +29,11 @@ Nothing is per workspace. Previews and local dev map both through `DEV_HOST_MAP`
 src/app/
   (public)/
     [key]/page.tsx        survey, state screens, thank you (rewrite target, see proxy)
-    report/page.tsx       report abuse form
     privacy/page.tsx      organization privacy notice
     layout.tsx            public layout: pixels, consent UI, footer, nonce
   (app)/
     w/[workspace]/...     dashboard, builder preview (pixels disabled)
-    admin/...             platform admin, abuse reports
+    admin/...             platform admin: workspaces, users, settings (R21)
     login/, auth/         sign in, OAuth callback, invite accept
   api/public/...          submit, resume, uploads, report, og
   api/cron/...            orphan upload sweep, retention (doc 04)
@@ -71,7 +70,7 @@ export async function proxy(req: NextRequest) {
 export const config = { matcher: ['/((?!_next/static|_next/image).*)'] }
 ```
 
-`/report` and `/privacy` match the `/{key}` pattern and are served by their own routes; both words are reserved aliases (section 2). The `(app)` layout also calls `notFound()` unless the host is `DASHBOARD_HOST`, as a second guard.
+`/privacy` matches the `/{key}` pattern and is served by its own route; it and `report` (whose page R21 removed, so `/report` now 404s as an unknown key) stay reserved aliases (section 2). The `(app)` layout also calls `notFound()` unless the host is `DASHBOARD_HOST`, as a second guard.
 
 **Origin isolation (R15).** Supabase auth cookies are set without a `Domain` attribute, so they are host-only to `DASHBOARD_HOST` and never sent to or readable from `PUBLIC_HOST`. A GTM container or `custom_script` on a public page runs on a different origin from every member session. Public pages create their Supabase client with the anon key and no cookie adapter; the `(public)` layout never imports `src/lib/supabase/server.ts`, enforced by ESLint `no-restricted-imports`.
 
@@ -470,7 +469,7 @@ Every event carries `survey_id` and `survey_key`. On completion the client waits
 
 ## 9. Public footer
 
-Rendered by the public layout on every public screen: survey, scheduled, closed, thank you, and the 404. Report and privacy pages show it without the report link.
+Rendered by the public layout on every public screen: survey, scheduled, closed, thank you, and the 404. The privacy page shows it too.
 
 ```tsx
 <footer className="public-footer">
@@ -481,23 +480,19 @@ Rendered by the public layout on every public screen: survey, scheduled, closed,
         {survey.workspace_name} privacy notice<span className="sr-only"> (opens in a new tab)</span>
       </a>
     )}
-    <a href={`/report?s=${survey.slug}`}>Report abuse</a>
   </nav>
   {survey.show_powered_by && <p className="powered-by">Powered by Survey</p>}
 </footer>
 ```
 
 - **Privacy notice** (always): `/privacy` on `PUBLIC_HOST`, the organization notice a platform admin edits (doc 05). The workspace's `privacy_notice_url` (https only, validated at save) is added when set. Both open in a new tab while a survey is in progress so a click never loses progress.
-- **Report abuse** (always, doc 05): `/report?s={slug}` on `PUBLIC_HOST`. Always the slug, never the alias, so a report survives a rename.
 - **Powered by Survey**: plain text, no link (there is no marketing site). `workspaces.show_powered_by` is a plain workspace toggle (default true, owner or admin). Nothing gates it.
 
-All three values come from `resolve_public_survey`. Real text, AA contrast, after the form in tab order.
+All values come from `resolve_public_survey`. Real text, AA contrast, after the form in tab order.
 
 ### 9.1 Report abuse
 
-`/report` renders a short form: reason (select: spam, phishing or impersonation, harassment or hateful content, illegal content, other), details (max 2,000 chars), optional contact (free text, max 200 chars, "only if you want us to follow up"), Turnstile, and the honeypot. No pixels on this page.
-
-`POST /api/public/report` runs the same honeypot, rate limit (bucket `report`, ip hash, 1 hour, 5), and Turnstile checks as submit, resolves `s` with `resolve_public_survey`, then inserts into `abuse_reports` with the service role (DDL in doc 01). An unknown slug is stored with a null survey id rather than rejected, so the form never confirms which slugs exist. The page always answers "Thanks, your report was received." Platform admins review and resolve reports in `/admin` on the dashboard host (doc 05), where they can close the survey. There is no notification, since there is no email; the admin home shows an open-report count.
+Removed by R21: there is no public report form, route or `abuse_reports` table.
 
 ---
 
@@ -542,8 +537,7 @@ Shown in place (same URL, no separate route) after `{ ok: true }`. Configured pe
 - **`excluded_pixel_ids uuid[]` on surveys.** One read, tiny lists, stale ids harmless.
 - **`pixel_consent_mode` with three modes, `banner` default.** Opt-in is the safe default; `in_form` is the old `gates_tracking` design.
 - **QR always encodes the single domain URL, with a permanent-link option for print.** Aliases can lapse after rename; slugs cannot.
-- **Footer always links the organization privacy notice, the workspace notice when set, and Report abuse; "Powered by" is plain text behind `show_powered_by`.** Report abuse follows doc 05; reports land in `abuse_reports` for platform admins.
-- **Abuse reports store unknown slugs instead of rejecting them.** The form never confirms which slugs exist.
+- **Footer always links the organization privacy notice and the workspace notice when set; "Powered by" is plain text behind `show_powered_by`.** The Report abuse link was removed by R21.
 - **Public pages `frame-ancestors 'none'` in v1.** Embedding is not in scope yet.
 
 ## Open questions for the owner

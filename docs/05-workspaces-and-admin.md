@@ -92,7 +92,7 @@ Nothing is emailed. Every invite is a link the creator copies and shares however
 
 ### 3.1 Platform invites
 
-Grant the right to be an active user. Issued only by platform admins at `/admin/invites`.
+Grant the right to be an active user. Issued only by platform admins at `/admin/users`, Platform invites section (R21).
 
 Proposed change to doc 01's `platform_invites` (adds token, expiry, revoke; email becomes optional):
 
@@ -216,16 +216,15 @@ Admin and owner. Reverse chronological. Filters: actor, entity, action, survey, 
 
 `profiles.is_platform_admin`, guarded by doc 01's `guard_profile_privileges()`. `is_platform_admin()` backs every admin RPC, all SECURITY DEFINER. Every action writes `platform_audit_log(id, actor, action, target_type, target_id, details jsonb, created_at)`, which is not workspace scoped so it survives workspace deletion.
 
+Three sections (R21), each in the admin nav; `?tab=` picks a section inside a page. Old paths (`/admin/invites`, `/admin/requests`, `/admin/privacy`, `/admin/audit`, `/admin/reports`) redirect.
+
 | Page | Contents |
 |---|---|
-| Invites | Issue (email optional, note, expiry), copy, revoke, list with claim status and email mismatch warnings. |
-| Requests | `access_requests` and `workspace_requests`: approve or dismiss. |
-| Users | Search, status, memberships, Generate reset link, Deactivate (Supabase ban plus `status = 'disabled'`; blocked while the user is an owner until ownership is transferred). |
-| Workspaces | Name, slug, owner, member count, survey count, response count, storage used, created, archived. Create workspace (1.1). Archive, restore, delete, force transfer ownership. |
-| Workspace limits | Edit `workspace_limits` overrides with a required note. |
-| Privacy notice | Edit the organization notice (section 7.1). |
-| Abuse reports | Section 7.3. |
-| Audit | `platform_audit_log` with filters. |
+| Workspaces `/admin/workspaces` | Name, slug, owner, member count, survey count, response count, storage used, created, archived. Create workspace (1.1). Archive, restore, delete, force transfer ownership. Detail page: `workspace_limits` overrides with a required note, add member. Each row offers "Open workspace" and "New survey" when the admin is a member, else "Add me as admin" (audited `admin_add_workspace_member`, then the surveys list). An admin who creates a workspace with themselves as owner lands on its New survey page. |
+| Users `/admin/users` | Users: search, status, memberships, Generate reset link, Deactivate (Supabase ban plus `status = 'disabled'`; blocked while the user is an owner until ownership is transferred). Platform invites (`?tab=invites`): issue (email optional, note, expiry), copy, revoke, list with claim status and email mismatch warnings. Requests (`?tab=requests`): `access_requests` and `workspace_requests`, approve or dismiss. |
+| Settings `/admin/settings` | Organization privacy notice (section 7.1). Platform audit log (`?tab=audit`): `platform_audit_log` with filters. |
+
+The admin header has a workspace switcher of the admin's own memberships (landing on each workspace's surveys) and a Back link to the last workspace.
 
 Counts come from `admin_workspace_stats()`, numbers only. Storage used sums `storage.objects` under the workspace prefix, cached on `workspaces.storage_bytes_used`, reconciled daily.
 
@@ -237,7 +236,7 @@ Counts come from `admin_workspace_stats()`, numbers only. Storage used sums `sto
 
 ### 7.1 Organization privacy notice
 
-Fixed route `/privacy` on the public hostname (R15), alongside `/report?s={slug}` and report share links at `/r/{token}`. Markdown in a singleton `platform_settings` row (`privacy_notice_md`, `updated_at`, `updated_by`), edited by a platform admin, revalidated on save. Every public survey footer links to it, plus "{Workspace} privacy notice" when `privacy_notice_url` is set, even with `show_powered_by` off.
+Fixed route `/privacy` on the public hostname (R15), alongside report share links at `/r/{token}`. Markdown in a singleton `platform_settings` row (`privacy_notice_md`, `updated_at`, `updated_by`), edited by a platform admin, revalidated on save. Every public survey footer links to it, plus "{Workspace} privacy notice" when `privacy_notice_url` is set, even with `show_powered_by` off.
 
 ### 7.2 Consent banner
 
@@ -245,12 +244,7 @@ Shown only when at least one pixel would load on that page, following the worksp
 
 ### 7.3 Report abuse
 
-Every public survey footer has a "Report abuse" link, always shown. With no email, reports go to a table.
-
-- Route `/report?s={slug}` on the public hostname (R15): reason (phishing or impersonation, asks for passwords or financial data, harassment, other), details (up to 2000 chars), optional reporter contact. Turnstile and the Postgres rate limiter (5 per IP per hour).
-- Stored in `abuse_reports(id, survey_id, workspace_id, reason, details, reporter_contact, ip_hash, status, reviewed_by, reviewed_at, created_at)` with status `open`, `dismissed`, `actioned`. Written by the route handler with the service role; no client policies.
-- Platform admins review in `/admin/reports`. Actions: dismiss, close the survey (`admin_close_survey(p_survey_id, p_reason)`, which changes state only and is logged in both audit logs), or archive the workspace. An `/admin` nav badge shows the open count.
-- Owners and admins see a banner with the reason on any survey an admin closes.
+Removed by R21: no public form, no `abuse_reports` table (dropped in migration 0022); platform admins close any survey directly.
 
 ## Decisions made here
 
@@ -265,16 +259,16 @@ Every public survey footer has a "Report abuse" link, always shown. With no emai
 9. Admin-minted password reset links, never stored, audited. No reliable SMTP.
 10. Feature flags dropped; raw script kill switch lives in `workspace_limits`. One org, deploys are flags.
 11. No impersonation. Keeps PII inside the department that collected it.
-12. Abuse reports go to a table reviewed in `/admin`. No email channel exists.
+12. Abuse reports: removed by R21.
 13. Org privacy notice at `/privacy`, edited in app. One organization, one notice.
 14. `platform_audit_log` is separate from `activity_log`. It must outlive deleted workspaces.
 
 ## Open questions for the owner
 
-1. Who besides you gets platform admin? At least two is safer for reset links and abuse review.
+1. Who besides you gets platform admin? At least two is safer for reset links.
 2. Should workspace invite links optionally be restricted to the org's email domain (for example only `@org.example`)?
 3. Is admin-assisted password reset acceptable long term, or will you add an auth-only SMTP sender?
-4. Should workspace owners see abuse reports against their own surveys, or only platform admins?
+4. (Withdrawn by R21: abuse reports were removed.)
 5. Is a 7 day archive period before deletion right, or too slow for a department that wants data gone now?
 6. Should the org privacy notice be drafted by legal or HR before launch, and who signs off edits?
 7. Confirm `banner` as the default `pixel_consent_mode` (also asked in R7).

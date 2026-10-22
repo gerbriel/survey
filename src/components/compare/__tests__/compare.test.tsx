@@ -83,7 +83,7 @@ vi.mock('@/lib/db/responses', () => ({
 
 vi.mock('@/lib/db/events', () => ({ readEvents: vi.fn(async () => ({ ok: true, data: [] })) }))
 
-const { default: ComparePage } = await import('@/app/(dashboard)/w/[slug]/compare/page')
+const { default: ComparePage } = await import('@/app/(dashboard)/w/[slug]/(results)/compare/page')
 const { CompareWithLink } = await import('../CompareWithLink')
 
 async function render(sp: Record<string, string>) {

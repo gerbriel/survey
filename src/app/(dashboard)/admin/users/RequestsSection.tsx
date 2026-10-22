@@ -1,23 +1,18 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
-import { requirePlatformAdmin } from '@/lib/auth'
 import { listProfiles, listAccessRequests, listWorkspaceRequests, REQUEST_STATUSES } from '@/lib/db/admin'
 import { listAuthUsers, type AuthUserSummary } from '@/lib/admin/service'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
 import { InlineAction } from '@/components/dashboard/InlineAction'
-import { PageHeader } from '@/components/dashboard/PageHeader'
 import { approveAccessRequest, dismissAccessRequestAction, dismissWorkspaceRequestAction } from '../actions'
-
-export const metadata: Metadata = { title: 'Requests' }
+import type { AdminCtx, SearchParams } from './types'
 
 type Status = (typeof REQUEST_STATUSES)[number]
 
 /** access_requests and workspace_requests queues (doc 05 sections 1.1 and 4.2). */
-export default async function RequestsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { supabase } = await requirePlatformAdmin()
-  const sp = await searchParams
+export async function RequestsSection({ ctx, sp }: { ctx: AdminCtx; sp: SearchParams }) {
+  const { supabase } = ctx
   const status: Status = (REQUEST_STATUSES as readonly string[]).includes(String(sp.status)) ? (sp.status as Status) : 'open'
   const [access, ws, profiles, users] = await Promise.all([
     listAccessRequests(supabase, { status }),
@@ -31,12 +26,13 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
 
   return (
     <>
-      <PageHeader title="Requests" description="People asking for access, and members asking for a new workspace." />
+      <h2 className="sr-only">Requests</h2>
+      <p className="mb-4 text-sm text-muted">People asking for access, and members asking for a new workspace.</p>
       <nav aria-label="Request status" className="mb-6 flex gap-3 text-sm">
         {REQUEST_STATUSES.map((s) => (
           <Link
             key={s}
-            href={`/admin/requests?status=${s}`}
+            href={`/admin/users?tab=requests&status=${s}`}
             aria-current={s === status ? 'page' : undefined}
             className={s === status ? 'font-semibold underline underline-offset-4' : 'text-accent underline underline-offset-2'}
           >
@@ -45,9 +41,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         ))}
       </nav>
       <section aria-labelledby="access" className="mb-10 flex flex-col gap-4">
-        <h2 id="access" className="text-lg font-semibold">
+        <h3 id="access" className="text-lg font-semibold">
           Access requests
-        </h2>
+        </h3>
         {!access.ok ? (
           <p role="alert" className="text-sm text-danger">{access.error.message}</p>
         ) : access.data.length === 0 ? (
@@ -94,9 +90,9 @@ export default async function RequestsPage({ searchParams }: { searchParams: Pro
         )}
       </section>
       <section aria-labelledby="ws" className="flex flex-col gap-4">
-        <h2 id="ws" className="text-lg font-semibold">
+        <h3 id="ws" className="text-lg font-semibold">
           Workspace requests
-        </h2>
+        </h3>
         {!ws.ok ? (
           <p role="alert" className="text-sm text-danger">{ws.error.message}</p>
         ) : ws.data.length === 0 ? (

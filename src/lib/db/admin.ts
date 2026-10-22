@@ -159,7 +159,6 @@ export function pendingStorageDeletions(client: AdminClient, input: z.input<type
 
 export type PlatformInvite = Tables<'platform_invites'>
 export type PlatformSettings = Tables<'platform_settings'>
-export type AbuseReport = Tables<'abuse_reports'>
 export type PlatformAuditRow = Tables<'platform_audit_log'>
 export type ProfileRow = Tables<'profiles'>
 export type WorkspaceRow = Tables<'workspaces'>
@@ -247,66 +246,6 @@ export function privacyNotice(admin: AdminClient) {
       updatedAt: row?.updated_at ?? null,
     }),
   )
-}
-
-// --- abuse reports -----------------------------------------------------------
-
-export const ABUSE_STATUSES = ['open', 'dismissed', 'actioned'] as const
-
-export const listAbuseInput = z.object({ status: z.enum(ABUSE_STATUSES).default('open') })
-
-export function listAbuseReports(client: UserClient, input: z.input<typeof listAbuseInput> = {}) {
-  return call(
-    listAbuseInput,
-    input,
-    (v) =>
-      client.from('abuse_reports').select('*').eq('status', v.status).order('created_at', { ascending: false }).limit(200),
-    (rows): AbuseReport[] => rows ?? [],
-  )
-}
-
-export function countOpenAbuseReports(client: UserClient) {
-  return call(
-    z.undefined().optional(),
-    undefined,
-    () =>
-      client
-        .from('abuse_reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'open')
-        .then((r) => ({ data: r.count, error: r.error })),
-    (n): number => n ?? 0,
-  )
-}
-
-export const setAbuseStatusInput = z.object({ reportId: id, status: z.enum(ABUSE_STATUSES) })
-
-/** Audited as abuse_report.{status}. */
-export function adminSetAbuseReportStatus(client: UserClient, input: z.input<typeof setAbuseStatusInput>) {
-  return call(
-    setAbuseStatusInput,
-    input,
-    (v) => client.rpc('admin_set_abuse_report_status', { p_report_id: v.reportId, p_status: v.status }),
-    () => undefined,
-  )
-}
-
-/** Matches the abuse_reports.reason check constraint (migration 0010). */
-export const ABUSE_REASONS = ['phishing', 'sensitive_data', 'harassment', 'other'] as const
-
-export const abuseReportInput = z.object({
-  survey_id: id.nullable(),
-  workspace_id: id.nullable(),
-  slug_text: z.string().max(100),
-  reason: z.enum(ABUSE_REASONS),
-  details: z.string().max(2000).nullable(),
-  reporter_contact: z.string().max(200).nullable(),
-  ip_hash: z.string().max(64).nullable(),
-})
-
-/** Service role, from the public report form after Turnstile and rate limits. */
-export function insertAbuseReport(admin: AdminClient, input: z.input<typeof abuseReportInput>) {
-  return call(abuseReportInput, input, (v) => admin.from('abuse_reports').insert(v), () => undefined)
 }
 
 // --- platform audit log --------------------------------------------------------

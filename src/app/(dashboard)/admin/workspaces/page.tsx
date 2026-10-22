@@ -1,29 +1,32 @@
 import type { Metadata } from 'next'
 import { requirePlatformAdmin } from '@/lib/auth'
 import { adminWorkspaceStats, platformStorageUsage, listAllWorkspaces, listProfiles, getWorkspaceRequest } from '@/lib/db/admin'
+import { listMemberships } from '@/lib/db/workspaces'
 import { listAuthUsers, type AuthUserSummary } from '@/lib/admin/service'
 import { deletionAvailableAt, formatBytes, formatDate, lifecycleState, purgeDueAt } from '@/lib/admin/lifecycle'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { AdminWorkspaceList, type AdminWorkspaceRow } from '@/components/admin/WorkspaceList'
 import { CreateWorkspaceForm } from '@/components/admin/AdminForms'
-import { createWorkspaceAction } from '../actions'
+import { adminJoinWorkspaceAction, createWorkspaceAction } from '../actions'
 
 export const metadata: Metadata = { title: 'Workspaces' }
 
 /** Every workspace with counts and storage (doc 05 section 6), plus create (section 1.1). */
 export default async function AdminWorkspacesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase, user } = await requirePlatformAdmin()
   const sp = await searchParams
   const requestId = typeof sp.request === 'string' && /^[0-9a-f-]{36}$/i.test(sp.request) ? sp.request : null
 
-  const [workspaces, counts, storage, profiles, users, request] = await Promise.all([
+  const [workspaces, counts, storage, profiles, users, request, mine] = await Promise.all([
     listAllWorkspaces(supabase),
     adminWorkspaceStats(supabase),
     platformStorageUsage(supabase),
     listProfiles(supabase),
     listAuthUsers(),
     requestId ? getWorkspaceRequest(supabase, { requestId }) : null,
+    listMemberships(supabase, { userId: user.id }),
   ])
+  const myRoles = new Map((mine.ok ? mine.data : []).map((m) => [m.workspace.id, m.role]))
   const list = workspaces.ok ? workspaces.data : []
   const stats = new Map((counts.ok ? counts.data : []).map((c) => [c.workspace_id, c]))
   const bytes = new Map((storage.ok ? storage.data : []).map((s) => [s.workspace_id, Number(s.bytes)]))
@@ -46,6 +49,7 @@ export default async function AdminWorkspacesPage({ searchParams }: { searchPara
       storage: formatBytes(bytes.get(w.id) ?? w.storage_bytes_used),
       created: formatDate(w.created_at),
       state,
+      myRole: myRoles.get(w.id) ?? null,
       stateNote:
         state === 'archived' && delAt
           ? `Deletable from ${formatDate(delAt)}`
@@ -71,7 +75,7 @@ export default async function AdminWorkspacesPage({ searchParams }: { searchPara
           Counts are unavailable: {counts.error.message}
         </p>
       ) : null}
-      <AdminWorkspaceList rows={rows} />
+      <AdminWorkspaceList rows={rows} joinAction={adminJoinWorkspaceAction} />
       <section id="create" aria-labelledby="create-heading" className="mt-10 flex flex-col gap-4">
         <h2 id="create-heading" className="text-lg font-semibold">
           Create a workspace

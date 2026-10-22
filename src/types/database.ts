@@ -14,71 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      abuse_reports: {
-        Row: {
-          created_at: string
-          details: string | null
-          id: string
-          ip_hash: string | null
-          reason: string
-          reporter_contact: string | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          slug_text: string
-          status: string
-          survey_id: string | null
-          workspace_id: string | null
-        }
-        ComputedFields: never
-        Insert: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          ip_hash?: string | null
-          reason: string
-          reporter_contact?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          slug_text: string
-          status?: string
-          survey_id?: string | null
-          workspace_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          details?: string | null
-          id?: string
-          ip_hash?: string | null
-          reason?: string
-          reporter_contact?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          slug_text?: string
-          status?: string
-          survey_id?: string | null
-          workspace_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "abuse_reports_reviewed_by_fkey"
-            columns: ["reviewed_by"]
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "abuse_reports_survey_id_fkey"
-            columns: ["survey_id"]
-            referencedRelation: "surveys"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "abuse_reports_workspace_id_fkey"
-            columns: ["workspace_id"]
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       access_requests: {
         Row: {
           created_at: string
@@ -2499,10 +2434,6 @@ export type Database = {
       }
       admin_revoke_platform_invite: {
         Args: { p_invite_id: string }
-        Returns: undefined
-      }
-      admin_set_abuse_report_status: {
-        Args: { p_report_id: string; p_status: string }
         Returns: undefined
       }
       admin_set_member_role: {

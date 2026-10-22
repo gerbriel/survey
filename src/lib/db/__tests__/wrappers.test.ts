@@ -136,7 +136,6 @@ describe('wrappers call the exact SQL function and argument names', () => {
     ['issuePlatformInvite', (f) => admin.adminIssuePlatformInvite(f.user, { email: 'A@b.co', note: null, expiresInDays: 7 }), 'admin_issue_platform_invite', { p_email: 'a@b.co', p_expires_in_days: 7 }],
     ['revokePlatformInvite', (f) => admin.adminRevokePlatformInvite(f.user, { inviteId: A }), 'admin_revoke_platform_invite', { p_invite_id: A }],
     ['updatePrivacyNotice', (f) => admin.adminUpdatePrivacyNotice(f.user, { markdown: '# N' }), 'admin_update_privacy_notice', { p_markdown: '# N' }],
-    ['abuseStatus', (f) => admin.adminSetAbuseReportStatus(f.user, { reportId: A, status: 'dismissed' }), 'admin_set_abuse_report_status', { p_report_id: A, p_status: 'dismissed' }],
     ['dismissAccess', (f) => admin.adminDismissAccessRequest(f.user, { requestId: A }), 'admin_dismiss_access_request', { p_request_id: A }],
     ['dismissWorkspace', (f) => admin.adminDismissWorkspaceRequest(f.user, { requestId: A }), 'admin_dismiss_workspace_request', { p_request_id: A }],
     ['hashSharePassword', (f) => reports.hashSharePassword(f.user, { password: 'secret12' }), 'hash_share_password', { p_password: 'secret12' }],

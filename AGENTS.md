@@ -109,7 +109,7 @@ Files:
 | `profiles.ts` | profile read, `last_workspace_id`, `is_platform_admin`, `listDirectory` (`directory_profiles`, never email) | user |
 | `assignments.ts` | survey owner and collaborators (R19): `set_survey_owner`, `add_survey_collaborator`, `remove_survey_collaborator`, assignment reads, list filter helpers | user |
 | `invites.ts` | invite claiming, `invitePreview`, workspace invite links | user |
-| `admin.ts` | platform admin functions, self-auditing `admin_*` writes, `adminWorkspaceStats`, platform reads, access and workspace requests, purge (`workspacePurgeDue`, `purgeWorkspace`, `pendingStorageDeletions`), `privacyNotice` and `insertAbuseReport` for public routes, `insertPlatformAudit` for Auth admin API actions only | user, service role where noted |
+| `admin.ts` | platform admin functions, self-auditing `admin_*` writes, `adminWorkspaceStats`, platform reads, access and workspace requests, purge (`workspacePurgeDue`, `purgeWorkspace`, `pendingStorageDeletions`), `privacyNotice` for public routes, `insertPlatformAudit` for Auth admin API actions only | user, service role where noted |
 | `pixels.ts` | workspace pixels | user |
 | `surveys.ts` | create, alias, locks, autosave, survey and version reads, settings update | user (reads also service role) |
 | `templates.ts` | survey templates | user |
@@ -155,7 +155,6 @@ From `docs/06-build-plan.md`. An agent writes only inside its rows. Any file not
 | `src/proxy.ts` | Phase 0 skeleton; 1D adds session refresh |
 | `src/app/(public)/layout.tsx` | 2C |
 | `src/app/(public)/[key]/page.tsx` | 2C |
-| `src/app/(public)/report/page.tsx` | 2C |
 | `src/app/(public)/privacy/page.tsx` | 2C |
 | `src/app/(public)/r/[token]/page.tsx` | 2E |
 | `src/app/(dashboard)/login/`, `pending/`, `invite/[token]/` | 2A |
@@ -168,11 +167,11 @@ From `docs/06-build-plan.md`. An agent writes only inside its rows. Any file not
 | `src/app/(dashboard)/w/[slug]/surveys/[id]/analytics/` | 2E |
 | `src/app/(dashboard)/w/[slug]/surveys/[id]/reports/` | 2E |
 | `src/app/(dashboard)/w/[slug]/contacts/` | 2D |
-| `src/app/(dashboard)/w/[slug]/privacy-tools/` | 2E |
+| `src/app/(dashboard)/w/[slug]/settings/privacy-tools/` | 2E |
 | `src/app/(dashboard)/w/[slug]/settings/` | 2A |
-| `src/app/(dashboard)/admin/` | 2A |
+| `src/app/(dashboard)/admin/` (Workspaces, Users with invites and requests, Settings with privacy notice and audit log; R21) | 2A |
 | `src/app/api/auth/callback/route.ts` | 2A |
-| `src/app/api/public/submit`, `resume`, `upload`, `report`, `og` | 2C |
+| `src/app/api/public/submit`, `resume`, `upload`, `og` | 2C |
 | `src/app/api/public/events/route.ts` | 2E |
 | `src/app/api/cron/orphan-sweep` | 2C |
 | `src/app/api/cron/retention` | 2E |

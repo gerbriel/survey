@@ -8,7 +8,7 @@ import { normalizeHost } from '@/lib/hosts'
 
 export const SITEVERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
 
-export type TurnstileAction = 'submit' | 'upload' | 'report'
+export type TurnstileAction = 'submit' | 'upload'
 
 export type TurnstileResult = { ok: true; skipped?: boolean } | { ok: false; reason: string }
 

@@ -6,7 +6,6 @@ import { z } from 'zod'
 import { requirePlatformAdmin } from '@/lib/auth'
 import {
   adminApproveAccessRequest,
-  adminCloseSurvey,
   adminCreateWorkspace,
   adminSetWorkspaceLimits,
   createWorkspaceInput,
@@ -14,7 +13,6 @@ import {
   adminIssuePlatformInvite,
   createPlatformInviteInput,
   adminRevokePlatformInvite,
-  adminSetAbuseReportStatus,
   setProfileStatus,
   adminUpdatePrivacyNotice,
   updatePrivacyNoticeInput,
@@ -26,6 +24,7 @@ import {
 } from '@/lib/db/admin'
 import {
   archiveWorkspace,
+  getWorkspaceById,
   requestWorkspaceDeletion,
   transferWorkspaceOwnership,
   unarchiveWorkspace,
@@ -62,7 +61,7 @@ export async function issuePlatformInvite(_prev: ActionState, form: FormData): P
     if (r.error.code === 'unique_violation') return failure('There is already an open invite for that email.', { email: 'Already invited.' })
     return fromDbError(r.error)
   }
-  revalidatePath('/admin/invites')
+  revalidatePath('/admin/users')
   return success('Invite created. Copy the link and share it. Nothing is emailed.', { url: inviteUrl(r.data.token) })
 }
 
@@ -72,7 +71,7 @@ export async function revokePlatformInviteAction(_prev: ActionState, form: FormD
   if (!id.success) return failure('Pick an invite.')
   const r = await adminRevokePlatformInvite(ctx.supabase, { inviteId: id.data })
   if (!r.ok) return fromDbError(r.error)
-  revalidatePath('/admin/invites')
+  revalidatePath('/admin/users')
   return success('Invite revoked.')
 }
 
@@ -128,6 +127,8 @@ export async function createWorkspaceAction(_prev: ActionState, form: FormData):
     return r.error.code === 'slug_taken' ? { ...st, fieldErrors: { slug: st.message ?? '' } } : st
   }
   revalidatePath('/admin', 'layout')
+  // The admin made themselves owner: the point was to build surveys, so go there.
+  if (rest.ownerId === ctx.user.id) redirect(`/w/${encodeURIComponent(rest.slug)}/surveys/new?created=1`)
   redirect(`/admin/workspaces/${r.data}?created=1`)
 }
 
@@ -205,6 +206,24 @@ async function addMember(workspaceId: unknown, form: FormData): Promise<ActionSt
   return success('Added to the workspace.')
 }
 
+/**
+ * "Add me as admin" on the admin workspace list and detail page. Same
+ * audited admin_add_workspace_member call as any other membership change
+ * (rule 3: admins read workspace data only as members), then straight to
+ * the workspace's surveys.
+ */
+export async function adminJoinWorkspaceAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const ctx = await requirePlatformAdmin()
+  const ws = idFrom(form, 'workspaceId')
+  if (!ws.success) return failure('Pick a workspace.')
+  const r = await adminAddWorkspaceMember(ctx.supabase, { workspaceId: ws.data, userId: ctx.user.id, role: 'admin' })
+  if (!r.ok) return fromDbError(r.error)
+  const w = await getWorkspaceById(ctx.supabase, { workspaceId: ws.data })
+  revalidatePath('/admin', 'layout')
+  if (!w.ok || !w.data) return success('Added as admin.')
+  redirect(`/w/${encodeURIComponent(w.data.slug)}/surveys`)
+}
+
 /** /admin/users: workspace id comes from the form. */
 export async function adminAddMemberAction(_prev: ActionState, form: FormData): Promise<ActionState> {
   return addMember(form.get('workspaceId'), form)
@@ -278,48 +297,6 @@ export async function savePrivacyNotice(_prev: ActionState, form: FormData): Pro
   const r = await adminUpdatePrivacyNotice(ctx.supabase, { markdown: parsed.data.markdown })
   if (!r.ok) return fromDbError(r.error)
   revalidatePath('/privacy')
-  revalidatePath('/admin/privacy')
+  revalidatePath('/admin/settings')
   return success('Privacy notice saved. The public page shows it now.')
-}
-
-// --- abuse reports ---------------------------------------------------------
-
-const statusForm = z.object({ reportId: z.guid(), status: z.enum(['open', 'dismissed', 'actioned']) })
-
-export async function setReportStatus(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const ctx = await requirePlatformAdmin()
-  const parsed = statusForm.safeParse(formFields(form))
-  if (!parsed.success) return failure('Pick a report and a status.')
-  const r = await adminSetAbuseReportStatus(ctx.supabase, parsed.data)
-  if (!r.ok) return fromDbError(r.error)
-  revalidatePath('/admin', 'layout')
-  return success('Report updated.')
-}
-
-const closeForm = z.object({
-  reportId: z.guid(),
-  surveyId: z.guid(),
-  reason: z.string().trim().min(1, 'Add a reason the owners will see.').max(1000),
-})
-
-export async function closeReportedSurvey(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const ctx = await requirePlatformAdmin()
-  const parsed = closeForm.safeParse(formFields(form))
-  if (!parsed.success) return fromZodError(parsed.error)
-  const r = await adminCloseSurvey(ctx.supabase, { surveyId: parsed.data.surveyId, reason: parsed.data.reason })
-  if (!r.ok) return fromDbError(r.error)
-  await adminSetAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, status: 'actioned' })
-  revalidatePath('/admin', 'layout')
-  return success('Survey closed and report marked actioned.')
-}
-
-export async function archiveReportedWorkspace(_prev: ActionState, form: FormData): Promise<ActionState> {
-  const ctx = await requirePlatformAdmin()
-  const parsed = z.object({ reportId: z.guid(), workspaceId: z.guid() }).safeParse(formFields(form))
-  if (!parsed.success) return failure('Pick a report.')
-  const r = await archiveWorkspace(ctx.supabase, { workspaceId: parsed.data.workspaceId })
-  if (!r.ok) return fromDbError(r.error)
-  await adminSetAbuseReportStatus(ctx.supabase, { reportId: parsed.data.reportId, status: 'actioned' })
-  revalidatePath('/admin', 'layout')
-  return success('Workspace archived and report marked actioned.')
 }

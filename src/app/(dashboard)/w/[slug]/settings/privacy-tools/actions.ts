@@ -1,6 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { privacyToolsPath } from '@/components/dashboard/nav-links'
 import { requireMember } from '@/lib/auth'
 import { confirmMatches, eraseRespondentFully } from '@/lib/privacy/erase'
 import { findRespondents } from '@/lib/db/privacy'
@@ -24,7 +25,7 @@ export async function eraseAction(slug: string, contactId: string, _prev: EraseS
   }
   const r = await eraseRespondentFully(m.supabase, { contactId, mode })
   if (!r.ok) return { status: 'error', message: r.error.message }
-  revalidatePath(`/w/${slug}/privacy-tools`)
+  revalidatePath(privacyToolsPath(slug))
   const files = r.data.filesFailed ? ` ${r.data.filesFailed} files could not be removed yet and will be retried.` : ''
   return { status: 'done', message: mode === 'hard' ? `Everything about this respondent was deleted.${files}` : `This respondent was anonymized; their answers stay in aggregates.${files}` }
 }

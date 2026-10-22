@@ -1,5 +1,3 @@
-import type { Metadata } from 'next'
-import { requirePlatformAdmin } from '@/lib/auth'
 import { listPlatformInvites, listProfiles } from '@/lib/db/admin'
 import { listAuthUsers, type AuthUserSummary } from '@/lib/admin/service'
 import { formatDate, inviteStatus } from '@/lib/admin/lifecycle'
@@ -8,35 +6,34 @@ import { Badge } from '@/components/ui/Badge'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
 import { CopyButton } from '@/components/dashboard/CopyButton'
 import { InlineAction } from '@/components/dashboard/InlineAction'
-import { PageHeader } from '@/components/dashboard/PageHeader'
 import { PlatformInviteForm } from '@/components/admin/AdminForms'
 import { issuePlatformInvite, revokePlatformInviteAction } from '../actions'
-
-export const metadata: Metadata = { title: 'Invites' }
+import type { AdminCtx } from './types'
 
 const LABEL = { open: 'Open', used: 'Claimed', expired: 'Expired', revoked: 'Revoked' } as const
 const TONE = { open: 'success', used: 'neutral', expired: 'neutral', revoked: 'danger' } as const
 
 /** Platform invites (doc 05 section 3.1) with claim status and email mismatch warnings. */
-export default async function AdminInvitesPage() {
-  const { supabase } = await requirePlatformAdmin()
+export async function InvitesSection({ ctx }: { ctx: AdminCtx }) {
+  const { supabase } = ctx
   const [invites, profiles, users] = await Promise.all([listPlatformInvites(supabase), listProfiles(supabase), listAuthUsers()])
   const names = new Map((profiles.ok ? profiles.data : []).map((p) => [p.id, p.display_name]))
   const emails = users.ok ? users.data : new Map<string, AuthUserSummary>()
 
   return (
     <>
-      <PageHeader title="Platform invites" description="An invite lets one person become an active user. Links are never emailed." />
+      <h2 className="sr-only">Platform invites</h2>
+      <p className="mb-4 text-sm text-muted">An invite lets one person become an active user. Links are never emailed.</p>
       <section aria-labelledby="new" className="mb-10 flex flex-col gap-4">
-        <h2 id="new" className="text-lg font-semibold">
+        <h3 id="new" className="text-lg font-semibold">
           Issue an invite
-        </h2>
+        </h3>
         <PlatformInviteForm action={issuePlatformInvite} />
       </section>
       <section aria-labelledby="list" className="flex flex-col gap-4">
-        <h2 id="list" className="text-lg font-semibold">
+        <h3 id="list" className="text-lg font-semibold">
           All invites
-        </h2>
+        </h3>
         {!invites.ok ? (
           <p role="alert" className="text-sm text-danger">
             {invites.error.message}

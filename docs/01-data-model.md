@@ -322,7 +322,7 @@ create table platform_audit_log (        -- platform admin actions; not workspac
 create index platform_audit_time on platform_audit_log (created_at desc);
 create index platform_audit_target on platform_audit_log (target_type, target_id);
 
-create table abuse_reports (             -- public form at /report?s={slug} (docs 02, 05)
+create table abuse_reports (             -- dropped in 0022 (R21); kept here as history
   id               uuid primary key default gen_random_uuid(),
   survey_id        uuid references surveys(id) on delete set null,       -- null when the slug is unknown
   workspace_id     uuid references workspaces(id) on delete set null,
@@ -339,7 +339,7 @@ create table abuse_reports (             -- public form at /report?s={slug} (doc
 create index abuse_reports_open on abuse_reports (created_at desc) where status = 'open';
 ```
 
-`abuse_reports` is written only by the `/report` route handler with the service role (after Turnstile and the 5 per IP per hour limit); unknown slugs are stored, not rejected, so the form never confirms whether a survey exists. Approving an access request mints a `platform_invites` row and activates that user immediately through `admin_approve_access_request(p_id)`.
+`abuse_reports` (dropped in 0022 by R21) was written only by the `/report` route handler with the service role (after Turnstile and the 5 per IP per hour limit); unknown slugs are stored, not rejected, so the form never confirms whether a survey exists. Approving an access request mints a `platform_invites` row and activates that user immediately through `admin_approve_access_request(p_id)`.
 
 ## 3. Surveys, versions, aliases, templates
 
@@ -943,7 +943,7 @@ Written by a generic `log_activity()` `after insert or update or delete` trigger
 | workspace_requests | own (`requested_by = auth.uid()`), PA | active profile, own | PA | none |
 | access_requests | own (`user_id = auth.uid()`), PA | own (pending allowed) | PA | none |
 | platform_audit_log | PA | fn | none | none |
-| abuse_reports | PA | none (service role route) | PA (review) | none |
+| abuse_reports (dropped in 0022, R21) | PA | none (service role route) | PA (review) | none |
 | workspace_members | V | fn (create, claim) | guarded: A for editor/viewer rows, O for admin rows, never to owner | A (editor/viewer), O (admin), self leaving (non-owner) |
 | workspace_invites | A | A | A (revoke) | A |
 | workspace_limits | V, PA | fn `admin_set_workspace_limits` (PA) | same fn | same fn |
@@ -1194,7 +1194,7 @@ pending_storage_deletions(p_workspace_id uuid) returns table (deletion_id, bucke
 admin_issue_platform_invite(p_email text default null, p_note text default null, p_expires_in_days int default 30) returns platform_invites  -- 2A
 admin_revoke_platform_invite(p_invite_id uuid) returns void                                          -- 2A
 admin_update_privacy_notice(p_markdown text) returns void                                            -- 2A
-admin_set_abuse_report_status(p_report_id uuid, p_status text) returns void                          -- 2A
+admin_set_abuse_report_status(p_report_id uuid, p_status text) returns void                          -- 2A, dropped in 0022 (R21)
 admin_dismiss_access_request(p_request_id uuid) returns void                                         -- 2A
 admin_dismiss_workspace_request(p_request_id uuid) returns void                                      -- 2A
 hash_share_password(p_password text) returns text                                                    -- 2E
@@ -1261,7 +1261,7 @@ Only `responses` joins `supabase_realtime`. The inbox subscribes with `filter: s
 7. `0007_contacts.sql`: contacts, contact_aliases, contact_notes, respondent_tokens, contact_field_defs, contact_views (built-in view seeds per workspace via `admin_create_workspace`), contact_duplicate_dismissals, contact_imports, `set_contact_custom`, `search_contacts`, `contact_duplicate_candidates`, `import_contacts_chunk`, owner cleanup trigger.
 8. `0008_responses.sql`: responses, answers, response_files, storage_deletions and its trigger, submission_idempotency, rate_limit_events, storage buckets and policies.
 9. `0009_events.sql`: events, event_daily, stopwords seed, `record_events`.
-10. `0010_pixels.sql`: workspace_pixels, raw script kill switch trigger, abuse_reports.
+10. `0010_pixels.sql`: workspace_pixels, raw script kill switch trigger, abuse_reports (dropped in 0022, R21).
 11. `0011_public_read.sql`: `resolve_public_survey`, `get_public_definition`, anon grants on exactly those two.
 12. `0012_submission.sql`: `rate_limit_hit`, `create_upload`, `submit_response`.
 13. `0013_reports_exports.sql`: reports, report_widgets, report_shares, export_jobs, `filtered_responses`, `version_questions`, `shared_report_payload`.
@@ -1271,6 +1271,8 @@ Only `responses` joins `supabase_realtime`. The inbox subscribes with `filter: s
 17. `0017_realtime.sql`: add responses to `supabase_realtime`.
 
 18. `0018_phase2_followups.sql`: see "Migration 0018" below.
+
+22. `0022_remove_abuse_reports.sql` (R21): drops `abuse_reports` and `admin_set_abuse_report_status`, restates the anon revokes. `report` stays in `reserved_public_segments()`. Tested by `supabase/tests/09_phase2_followups.sql`.
 
 A test after 0017 asserts `anon` holds no table privilege in `public` and exactly two function privileges.
 

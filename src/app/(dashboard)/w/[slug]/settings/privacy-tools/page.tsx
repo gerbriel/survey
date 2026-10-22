@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Button } from '@/components/ui/Button'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
+import { privacyToolsPath } from '@/components/dashboard/nav-links'
 import { requireMember, roleAtLeast } from '@/lib/auth'
 import { findRespondents, reviewRespondent } from '@/lib/db/privacy'
 import { parseLookup } from '@/lib/privacy/lookup'
@@ -19,7 +20,8 @@ type Props = {
 /**
  * Respondent lookup, GDPR export (editor and above) and erase (admin and
  * owner), plus retention status (doc 04 section 7). Every action re-checks
- * the role in SQL.
+ * the role in SQL. Lives under Settings since R22; the settings layout
+ * renders the page title and tabs.
  */
 export default async function PrivacyToolsPage({ params, searchParams }: Props) {
   const { slug } = await params
@@ -33,10 +35,10 @@ export default async function PrivacyToolsPage({ params, searchParams }: Props) 
   const retention = await retentionStatus(m.supabase, m.workspace)
 
   return (
-    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-4 md:p-6">
+    <div className="flex max-w-4xl flex-col gap-6">
       <header>
-        <p className="text-xs text-muted">Privacy tools</p>
-        <h1 className="text-xl font-semibold text-fg">Find a respondent</h1>
+        <h2 className="text-lg font-semibold">Privacy tools</h2>
+        <h3 className="mt-2 text-base font-semibold text-fg">Find a respondent</h3>
         <p className="text-sm text-muted">Search by email, personal link token or link, or contact id. Editors can export a respondent&apos;s data; admins can erase it.</p>
       </header>
 
@@ -68,7 +70,7 @@ export default async function PrivacyToolsPage({ params, searchParams }: Props) 
             <div className="flex flex-wrap gap-2">
               <a
                 className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm text-fg hover:bg-surface-muted"
-                href={`/w/${slug}/privacy-tools/export?contact=${r.data.contact.id}`}
+                href={privacyToolsPath(slug, 'export', `contact=${r.data.contact.id}`)}
               >
                 Export data (JSON)
               </a>
@@ -96,6 +98,6 @@ export default async function PrivacyToolsPage({ params, searchParams }: Props) 
         )}
         <p className="text-xs text-muted">Raw analytics events are kept 180 days, then summarized per day.</p>
       </section>
-    </main>
+    </div>
   )
 }

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cx, focusRing } from '@/components/ui/cx'
-import { isActivePath, type NavLink } from './nav-links'
+import { isActiveLink, type NavLink } from './nav-links'
 
 /**
  * Horizontal link list with aria-current on the active section. Scrolls
@@ -16,7 +16,7 @@ export function Nav({ links, label, className }: { links: NavLink[]; label: stri
     <nav aria-label={label} className={cx('-mx-1 overflow-x-auto', className)}>
       <ul className="flex min-w-max gap-1 px-1">
         {links.map((l) => {
-          const active = isActivePath(pathname, l.href)
+          const active = isActiveLink(pathname, l)
           return (
             <li key={l.href}>
               <Link

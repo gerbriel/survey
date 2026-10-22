@@ -64,6 +64,6 @@ describe('checkRateLimits', () => {
   it('fails open on a database error', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     rateLimitHit.mockResolvedValue({ ok: false, error: { code: 'network' } })
-    expect(await checkRateLimits(admin, [{ rule: RATE_LIMITS.report, key: 'ip' }])).toEqual({ ok: true })
+    expect(await checkRateLimits(admin, [{ rule: RATE_LIMITS.resume, key: 'ip' }])).toEqual({ ok: true })
   })
 })

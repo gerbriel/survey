@@ -30,7 +30,7 @@ declare global {
 
 export const TURNSTILE_SRC = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
 
-export type TurnstileAction = 'submit' | 'upload' | 'report'
+export type TurnstileAction = 'submit' | 'upload'
 
 function waitForApi(timeoutMs: number): Promise<TurnstileApi | null> {
   return new Promise((resolve) => {

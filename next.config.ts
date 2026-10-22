@@ -18,6 +18,18 @@ const nextConfig: NextConfig = {
   agentRules: false,
   // Both dev hostnames load dev assets from the same server.
   allowedDevOrigins: ['survey.localhost', 's.localhost'],
+  // R21: old platform admin paths. Query strings pass through, so
+  // /admin/requests?status=approved keeps its filter. 307, not permanent, so
+  // a later change to the admin layout is not stuck in browser caches.
+  async redirects() {
+    return [
+      { source: '/admin/invites', destination: '/admin/users?tab=invites', permanent: false },
+      { source: '/admin/requests', destination: '/admin/users?tab=requests', permanent: false },
+      { source: '/admin/privacy', destination: '/admin/settings', permanent: false },
+      { source: '/admin/audit', destination: '/admin/settings?tab=audit', permanent: false },
+      { source: '/admin/reports', destination: '/admin', permanent: false },
+    ]
+  },
   async headers() {
     return [
       {

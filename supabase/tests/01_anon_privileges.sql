@@ -30,8 +30,8 @@ do $$
 begin
   assert tests.err('select 1 from public.surveys limit 1') like '%permission denied%', 'anon read surveys';
   assert tests.err('select 1 from public.responses limit 1') like '%permission denied%', 'anon read responses';
-  assert tests.err('insert into public.abuse_reports (slug_text, reason) values (''x'', ''other'')') like '%permission denied%',
-    'anon insert abuse_reports';
+  assert tests.err('insert into public.access_requests (user_id, name) values (gen_random_uuid(), ''x'')') like '%permission denied%',
+    'anon insert access_requests';
   assert tests.err('select public.is_member(gen_random_uuid())') like '%permission denied%', 'anon execute is_member';
   assert tests.err('select public.submit_response(''{}''::jsonb)') like '%permission denied%', 'anon execute submit_response';
   assert (select count(*) from public.resolve_public_survey('no-such-survey')) = 0, 'unknown key resolves to nothing';

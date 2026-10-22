@@ -19,6 +19,7 @@ import { limitsFormDefaults } from '@/lib/admin/limits-form'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { roleLabel } from '@/components/dashboard/RoleBadge'
 import { LimitsEditor } from '@/components/admin/AdminForms'
+import { WorkspaceEntry } from '@/components/admin/WorkspaceEntry'
 import { AdminLifecycle, ForceTransferForm } from '@/components/admin/AdminLifecycle'
 import { LimitsTable } from '@/components/settings/LimitsTable'
 import { AddExistingUserForm } from '@/components/settings/MembersTable'
@@ -27,6 +28,7 @@ import {
   adminAddMemberToWorkspace,
   adminArchive,
   adminForceTransfer,
+  adminJoinWorkspaceAction,
   adminRequestDeletion,
   adminRestore,
   adminUnarchive,
@@ -57,7 +59,7 @@ export default async function AdminWorkspacePage({
   params: Promise<{ id: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const { supabase } = await requirePlatformAdmin()
+  const { supabase, user } = await requirePlatformAdmin()
   const { id } = await params
   const sp = await searchParams
   if (!/^[0-9a-f-]{36}$/i.test(id)) notFound()
@@ -79,6 +81,7 @@ export default async function AdminWorkspacePage({
     .filter((p) => !memberIds.has(p.id))
     .map((p) => ({ id: p.id, name: p.display_name, detail: emails?.get(p.id)?.email ?? null }))
   const owner = memberList.find((m) => m.role === 'owner')
+  const myRole = memberList.find((m) => m.user_id === user.id)?.role ?? null
   const candidates = memberList
     .filter((m) => m.role !== 'owner' && m.status === 'active')
     .map((m) => ({ value: m.user_id, label: `${m.display_name} (${roleLabel(m.role)})` }))
@@ -90,6 +93,17 @@ export default async function AdminWorkspacePage({
         eyebrow={<Link href="/admin/workspaces" className="underline underline-offset-2">All workspaces</Link>}
         title={w.name}
         description={`/w/${w.slug}. Owner: ${owner?.display_name ?? 'none'}. ${memberList.length} members.`}
+        actions={
+          <WorkspaceEntry
+            name={w.name}
+            slug={w.slug}
+            workspaceId={w.id}
+            myRole={myRole}
+            archived={w.archived_at !== null || w.deleted_at !== null}
+            deleted={w.deleted_at !== null}
+            joinAction={adminJoinWorkspaceAction}
+          />
+        }
       />
       {sp.created ? (
         <p role="status" className="mb-6 text-sm text-success">

@@ -15,7 +15,7 @@ import { updateSession } from '@/lib/supabase/proxy'
  * Named `proxy`, not `middleware`: Next 16 renamed the file convention.
  *
  * Two hostnames, one deployment:
- *   PUBLIC_HOST     public surveys, report abuse, privacy notice, /api/public/*.
+ *   PUBLIC_HOST     public surveys, privacy notice, /api/public/*.
  *                   Never a session, never an auth cookie.
  *   DASHBOARD_HOST  everything else. Workspace pixels never load here.
  *

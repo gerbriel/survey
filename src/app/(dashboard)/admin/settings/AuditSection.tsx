@@ -1,6 +1,4 @@
-import type { Metadata } from 'next'
 import Link from 'next/link'
-import { requirePlatformAdmin } from '@/lib/auth'
 import { listPlatformAudit, listProfiles } from '@/lib/db/admin'
 import { formatDateTime } from '@/lib/admin/lifecycle'
 import { Button } from '@/components/ui/Button'
@@ -8,19 +6,16 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
-import { PageHeader } from '@/components/dashboard/PageHeader'
 import { DiffDetails } from '@/components/settings/DiffDetails'
 import { LogPager } from '@/components/settings/LogPager'
 import { readFilters, readPage } from '@/components/settings/activity-view'
+import type { AdminCtx, SearchParams } from '../users/types'
 
-export const metadata: Metadata = { title: 'Audit log' }
-
-const TARGETS = ['workspace', 'user', 'invite', 'survey', 'abuse_report', 'settings']
+const TARGETS = ['workspace', 'user', 'invite', 'survey', 'settings']
 
 /** platform_audit_log viewer. It outlives deleted workspaces (doc 05 decision 14). */
-export default async function AuditPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const { supabase } = await requirePlatformAdmin()
-  const sp = await searchParams
+export async function AuditSection({ ctx, sp }: { ctx: AdminCtx; sp: SearchParams }) {
+  const { supabase } = ctx
   const filters = readFilters(sp, ['action', 'targetType', 'targetId'])
   const page = readPage(sp)
   const [log, profiles] = await Promise.all([
@@ -36,8 +31,10 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
 
   return (
     <>
-      <PageHeader title="Audit log" description="Every platform admin action and workspace purge." />
+      <h2 className="sr-only">Platform audit log</h2>
+      <p className="mb-4 text-sm text-muted">Every platform admin action and workspace purge.</p>
       <form method="get" className="mb-6 grid gap-3 sm:grid-cols-4 sm:items-end">
+        <input type="hidden" name="tab" value="audit" />
         <Input label="Action contains" name="action" defaultValue={filters.action ?? ''} placeholder="workspace." />
         <Select
           label="Target type"
@@ -49,7 +46,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
         <Input label="Target id" name="targetId" defaultValue={filters.targetId ?? ''} />
         <div className="flex gap-2">
           <Button type="submit">Filter</Button>
-          <Link href="/admin/audit" className="inline-flex h-10 items-center px-2 text-sm text-accent underline underline-offset-2">
+          <Link href="/admin/settings?tab=audit" className="inline-flex h-10 items-center px-2 text-sm text-accent underline underline-offset-2">
             Clear
           </Link>
         </div>
@@ -88,7 +85,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
             </TBody>
           </Table>
           <div className="mt-4">
-            <LogPager path="/admin/audit" filters={filters} page={page} total={log.data.total} pageSize={log.data.pageSize} />
+            <LogPager path="/admin/settings" filters={{ tab: 'audit', ...filters }} page={page} total={log.data.total} pageSize={log.data.pageSize} />
           </div>
         </>
       )}

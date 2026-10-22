@@ -10,7 +10,7 @@ export default function PublicHome() {
         <p className="text-muted">Use the link you were given.</p>
       </main>
       <footer className="text-muted">
-        <PublicFooter newTab={false} showReport={false} />
+        <PublicFooter newTab={false} />
       </footer>
     </div>
   )

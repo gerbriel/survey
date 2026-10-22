@@ -265,7 +265,6 @@ reset role;
 select tests.clear_claims();
 insert into public.access_requests (user_id, name) values (tests.id('outsider'), 'Out Sider');
 insert into public.workspace_requests (requested_by, department_name) values (tests.id('editor1'), 'Facilities');
-insert into public.abuse_reports (slug_text, reason) values ('abcdefghij', 'phishing');
 select tests.as_user('pa');
 do $$
 declare v_inv public.platform_invites; v_audit int;
@@ -282,24 +281,21 @@ begin
   assert tests.err(format('select public.admin_revoke_platform_invite(%L)', v_inv.id)) = 'invalid_state', 'revoke once';
   perform public.admin_update_privacy_notice('# Notice');
   assert (select privacy_notice_md from public.platform_settings) = '# Notice', 'notice saved';
-  perform public.admin_set_abuse_report_status((select id from public.abuse_reports limit 1), 'actioned');
-  assert (select status = 'actioned' and reviewed_by = tests.id('pa') from public.abuse_reports limit 1), 'abuse status';
-  assert tests.err($q$select public.admin_set_abuse_report_status((select id from public.abuse_reports limit 1), 'nope')$q$)
-         like 'Status must be%', 'abuse status checked';
   perform public.admin_dismiss_access_request((select id from public.access_requests where user_id = tests.id('outsider')));
   perform public.admin_dismiss_workspace_request((select id from public.workspace_requests where department_name = 'Facilities'));
   assert tests.err($q$select public.admin_dismiss_workspace_request((select id from public.workspace_requests where department_name = 'Facilities'))$q$)
          = 'invalid_state', 'dismiss once';
-  assert (select count(*) from public.platform_audit_log) = v_audit + 6, 'six audit rows';
+  assert (select count(*) from public.platform_audit_log) = v_audit + 5, 'five audit rows';
   assert (select array_agg(action order by id) from public.platform_audit_log where actor = tests.id('pa'))
-         @> array['invite.create', 'invite.revoke', 'settings.privacy_notice', 'abuse_report.actioned',
+         @> array['invite.create', 'invite.revoke', 'settings.privacy_notice',
                   'access_request.dismiss', 'workspace_request.dismiss'], 'audit actions';
 end $$;
 select tests.as_user('owner');
 do $$ begin
   assert tests.err($q$select public.admin_issue_platform_invite(null, null, 7)$q$) = 'not_authorized', 'invite: PA only';
   assert tests.err($q$select public.admin_update_privacy_notice('x')$q$) = 'not_authorized', 'notice: PA only';
-  assert tests.err($q$select public.admin_set_abuse_report_status(gen_random_uuid(), 'open')$q$) = 'not_authorized', 'abuse: PA only';
+  assert to_regclass('public.abuse_reports') is null, 'abuse_reports dropped (0022)';
+  assert to_regprocedure('public.admin_set_abuse_report_status(uuid, text)') is null, 'abuse function dropped (0022)';
   assert tests.err($q$select public.admin_dismiss_access_request(gen_random_uuid())$q$) = 'not_authorized', 'access: PA only';
 end $$;
 

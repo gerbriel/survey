@@ -113,7 +113,7 @@ vi.mock('@/lib/db/responses', () => ({
   })),
 }))
 
-const { default: ResultsPage } = await import('@/app/(dashboard)/w/[slug]/results/page')
+const { default: ResultsPage } = await import('@/app/(dashboard)/w/[slug]/(results)/results/page')
 const { ResultsTable } = await import('../ResultsTable')
 
 async function render(sp: Record<string, string> = {}) {

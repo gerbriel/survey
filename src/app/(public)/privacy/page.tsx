@@ -12,7 +12,7 @@ export default async function PrivacyPage() {
   const notice = await getPrivacyNotice()
   const text = notice?.markdown.trim() ?? ''
   return (
-    <PublicFrame footer={<PublicFooter newTab={false} showReport={false} />}>
+    <PublicFrame footer={<PublicFooter newTab={false} />}>
       <h1 className="text-2xl font-bold">Privacy notice</h1>
       {text ? (
         <Markdown text={text} />

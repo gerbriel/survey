@@ -13,7 +13,7 @@ import { rateKeyIp } from './http'
 
 export type RateLimitRule = { bucket: string; window: string; windowSeconds: number; max: number }
 
-/** Doc 02 section 5.2 table, plus the report and resume buckets. */
+/** Doc 02 section 5.2 table, plus the resume bucket. */
 export const RATE_LIMITS = {
   // S9 (R17): sized for an office NAT, keyed by IP plus survey id; Turnstile is the real gate.
   submitCreate: { bucket: 'submit:create', window: '10 minutes', windowSeconds: 600, max: 60 },
@@ -22,7 +22,6 @@ export const RATE_LIMITS = {
   submitComplete: { bucket: 'submit:complete', window: '1 hour', windowSeconds: 3600, max: 20 },
   submitSurvey: { bucket: 'submit:survey', window: '1 minute', windowSeconds: 60, max: 600 },
   uploadMint: { bucket: 'upload:mint', window: '10 minutes', windowSeconds: 600, max: 30 },
-  report: { bucket: 'report', window: '1 hour', windowSeconds: 3600, max: 5 },
   // Decision: resume lookups share the upload budget size; a resume token is a
   // 256-bit secret, so this only bounds load, not guessing.
   resume: { bucket: 'resume', window: '10 minutes', windowSeconds: 600, max: 30 },

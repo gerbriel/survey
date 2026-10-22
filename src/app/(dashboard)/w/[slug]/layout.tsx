@@ -69,7 +69,10 @@ export default async function WorkspaceLayout({
               </Link>
             ) : null}
             {profile?.is_platform_admin ? (
-              <Link href="/admin" className="text-sm text-muted underline-offset-2 hover:text-fg hover:underline">
+              <Link
+                href="/admin"
+                className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-fg hover:bg-surface-muted"
+              >
                 Platform admin
               </Link>
             ) : null}
