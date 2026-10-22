@@ -3,6 +3,7 @@ import { requireMember } from '@/lib/auth'
 import { listMemberships } from '@/lib/db/workspaces'
 import { setLastWorkspace } from '@/lib/db/profiles'
 import { Nav } from '@/components/dashboard/Nav'
+import { memberCan } from '@/lib/auth/roles'
 import { RoleBadge } from '@/components/dashboard/RoleBadge'
 import { SignOutButton } from '@/components/dashboard/SignOutButton'
 import { WorkspaceSwitcher } from '@/components/dashboard/WorkspaceSwitcher'
@@ -59,6 +60,14 @@ export default async function WorkspaceLayout({
             <RoleBadge role={role} />
           </div>
           <div className="flex items-center gap-2">
+            {memberCan(role, 'editor', workspace) ? (
+              <Link
+                href={`/w/${encodeURIComponent(workspace.slug)}/surveys/new`}
+                className="inline-flex h-9 items-center rounded-md bg-accent px-3 text-sm font-medium text-accent-fg"
+              >
+                New survey
+              </Link>
+            ) : null}
             {profile?.is_platform_admin ? (
               <Link href="/admin" className="text-sm text-muted underline-offset-2 hover:text-fg hover:underline">
                 Platform admin

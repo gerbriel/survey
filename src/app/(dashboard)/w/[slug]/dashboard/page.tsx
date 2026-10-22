@@ -3,7 +3,8 @@ import Link from 'next/link'
 import { Bar, Sparkline, StatTile, percent } from '@/components/charts'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
-import { requireMember } from '@/lib/auth'
+import { requireMember, memberCan } from '@/lib/auth'
+import { PageHeader } from '@/components/dashboard/PageHeader'
 import { loadDashboard } from '@/lib/analytics/dashboard'
 
 export const metadata: Metadata = { title: 'Dashboard' }
@@ -18,13 +19,26 @@ export default async function DashboardPage({ params }: Props) {
   const m = await requireMember(slug, 'viewer')
   const d = await loadDashboard(m.supabase, m.workspace.id)
   const base = `/w/${slug}`
+  const canEdit = memberCan(m.role, 'editor', m.workspace)
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-6 p-4 md:p-6">
-      <header>
-        <p className="text-xs text-muted">Dashboard</p>
-        <h1 className="text-xl font-semibold text-fg">{m.workspace.name}</h1>
-      </header>
+    <div className="mx-auto flex max-w-6xl flex-col gap-6">
+      <PageHeader
+        title={m.workspace.name}
+        description="What is happening across this workspace. Surveys are built and shared from the Surveys tab."
+        actions={
+          <>
+            {canEdit ? (
+              <Link href={`${base}/surveys/new`} className="inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-fg">
+                New survey
+              </Link>
+            ) : null}
+            <Link href={`${base}/surveys`} className="inline-flex h-10 items-center rounded-md border border-border px-4 text-sm font-medium text-fg">
+              All surveys
+            </Link>
+          </>
+        }
+      />
 
       <section aria-label="This week" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
@@ -46,7 +60,17 @@ export default async function DashboardPage({ params }: Props) {
         <section aria-label="Open surveys" className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
           <h2 className="text-sm font-semibold text-fg">Open surveys</h2>
           {d.openSurveys.length === 0 ? (
-            <p className="text-sm text-muted">No surveys are open.</p>
+            <EmptyState
+              title="No open surveys"
+              description="Create a survey, publish it, then open it in its Settings tab to start collecting responses."
+              action={
+                canEdit ? (
+                  <Link href={`${base}/surveys/new`} className="inline-flex h-10 items-center rounded-md bg-accent px-4 text-sm font-medium text-accent-fg">
+                    Create your first survey
+                  </Link>
+                ) : undefined
+              }
+            />
           ) : (
             <Table caption="Open surveys, last 7 days">
               <THead>
@@ -120,6 +144,6 @@ export default async function DashboardPage({ params }: Props) {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   )
 }
