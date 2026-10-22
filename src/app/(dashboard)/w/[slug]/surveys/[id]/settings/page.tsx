@@ -24,13 +24,20 @@ export default async function SurveySettingsPage({ params }: { params: Promise<{
   const candidates = (members.ok ? members.data : [])
     .filter((m) => m.status === 'active')
     .map((m) => ({ id: m.user_id, name: m.display_name, detail: roleLabel(m.role) }))
-  let identityText = 'No identity question. Responses are not matched to contacts by email.'
+  let identityText =
+    'No identity question. Add an email question in the builder; the first one becomes the identity key automatically. Until then responses are not matched to contacts.'
   if (survey.current_draft_version_id) {
     const v = await getVersion(member.supabase, { versionId: survey.current_draft_version_id })
     const d = v.ok && v.data ? loadDefinition(v.data.definition) : null
     if (d?.ok) {
       const q = d.definition.identity.email_question_id ? d.definition.questions[d.definition.identity.email_question_id] : undefined
-      if (q) identityText = `Responses are matched to contacts by the answer to "${q.label.text}" (in the current draft).`
+      if (q) {
+        // The live submission path reads surveys.identity_question_key, which publish writes.
+        const published = survey.identity_question_key === q.question_key
+        identityText = published
+          ? `Responses are matched to contacts by the answer to "${q.label.text}".`
+          : `Responses will be matched to contacts by the answer to "${q.label.text}" once you publish. The published version has no identity key yet.`
+      }
     }
   }
   const now = requestTime()

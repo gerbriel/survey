@@ -33,6 +33,7 @@ export type LintCode =
   | 'question_on_many_pages'
   | 'question_orphan'
   | 'identity_type'
+  | 'identity_missing'
   | 'endings_empty'
   | 'ending_id_duplicate'
   | 'redirect_url'
@@ -185,6 +186,10 @@ export function lintDefinition(def: SurveyDefinition, opts: LintOptions = {}): L
   if (em !== undefined && def.questions[em]?.type !== 'email') error('identity_type', 'The identity email must point at an email question.', { path: 'identity.email_question_id' })
   const ph = def.identity.phone_question_id
   if (ph !== undefined && def.questions[ph]?.type !== 'phone') error('identity_type', 'The identity phone must point at a phone question.', { path: 'identity.phone_question_id' })
+  if (em === undefined) {
+    const firstEmail = Object.values(def.questions).find((x) => x.type === 'email')
+    if (firstEmail) warn('identity_missing', 'There is an email question but no identity key, so responses will not be matched to contacts. Mark the email question as the identity key in its settings.', { question_id: firstEmail.id })
+  }
 
   // Endings
   if (def.endings.length === 0) error('endings_empty', 'Add at least one ending.', { path: 'endings' })

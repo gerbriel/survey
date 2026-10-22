@@ -71,8 +71,14 @@ export function addQuestion(def: SurveyDefinition, q: Question, pageId?: string,
     pages = [{ id: newId(def, 'page'), question_ids: [] }]
   }
   const pid = target ?? (pages[0] as Page).id
+  // Owner feedback 2026-10-22: the first email (or phone) question becomes the
+  // identity key on its own, so contacts match without finding a checkbox.
+  const identity = { ...def.identity }
+  if (q.type === 'email' && identity.email_question_id === undefined) identity.email_question_id = q.id
+  if (q.type === 'phone' && identity.phone_question_id === undefined) identity.phone_question_id = q.id
   return {
     ...def,
+    identity,
     questions: { ...def.questions, [q.id]: q },
     pages: pages.map((p) => {
       if (p.id !== pid) return p
@@ -234,6 +240,9 @@ export function changeType(
   const identity = { ...def.identity }
   if (identity.email_question_id === id && type !== 'email') delete identity.email_question_id
   if (identity.phone_question_id === id && type !== 'phone') delete identity.phone_question_id
+  // Same auto-assignment when a question is changed into an email or phone question.
+  if (type === 'email' && identity.email_question_id === undefined) identity.email_question_id = id
+  if (type === 'phone' && identity.phone_question_id === undefined) identity.phone_question_id = id
   return { ...def, identity, questions: { ...def.questions, [id]: next } }
 }
 
