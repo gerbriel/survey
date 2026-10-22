@@ -105,7 +105,7 @@ export function SettingsForm({
       og_title: v.og_title?.trim() || null,
       og_description: v.og_description?.trim() || null,
       og_image_path: v.og_image_path,
-      allow_indexing: v.allow_indexing,
+      allow_indexing: false, // Owner decision 2026-10-22: surveys are never indexable; the option was removed from the UI.
     }
     const r = await updateSettingsAction(surveyId, patch)
     setSaving(false)
@@ -184,7 +184,6 @@ export function SettingsForm({
             Remove preview image
           </Button>
         ) : null}
-        <Check label="Allow search engines to index this survey" checked={v.allow_indexing} disabled={disabled} onChange={(on) => set({ allow_indexing: on })} />
       </Section>
 
       <Section title="Identity and endings">

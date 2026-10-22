@@ -51,7 +51,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     twitter: { card: 'summary_large_image', title, description, images: image ? [image] : undefined },
     // Unfurlers ignore noindex, so link previews still work (doc 02 section 4).
-    robots: s.allow_indexing ? { index: true, follow: true } : NOINDEX,
+    robots: NOINDEX, // Owner decision 2026-10-22: always noindex, regardless of the stored flag.
   }
 }
 
@@ -63,7 +63,6 @@ export default async function SurveyPage({ params }: Props) {
   const logoUrl = publicAssetUrl(s.logo_path)
   const footer = (
     <PublicFooter
-      slug={s.slug}
       workspaceName={s.workspace_name}
       privacyNoticeUrl={s.privacy_notice_url}
       showPoweredBy={s.show_powered_by}
