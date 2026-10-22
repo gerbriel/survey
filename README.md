@@ -66,3 +66,14 @@ pnpm db:reset      # supabase db reset (needs Docker)
 pnpm test:sql      # SQL assertions (placeholder until Phase 1A)
 pnpm check:copy    # fails on any em or en dash
 ```
+
+## Production
+
+Vercel project `survey`, auto deploys from `main`. Two hostnames on one deployment, per ruling R15:
+
+| Host | Serves |
+|---|---|
+| `survey-sand-six.vercel.app` | dashboard (`DASHBOARD_HOST`) |
+| `survey-public-gr.vercel.app` | public survey pages (`PUBLIC_HOST`) |
+
+Production env vars are set in the Vercel project from `.env.local` names; see `.env.example` for the list. Cron schedules live in `vercel.json`. Supabase Site URL and redirect URLs must include the dashboard host; the Turnstile widget must include the public host. When a custom domain arrives, swap both hosts in the Vercel env vars, Supabase, and Turnstile, then redeploy.
