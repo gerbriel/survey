@@ -44,8 +44,18 @@ export const PUBLIC_HOME_PATH = '/_home'
 /** `/{slug}` or `/{alias}`: lowercase, 3 to 64 chars, inner hyphens only. */
 const KEY_RE = /^\/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/
 
+/**
+ * Starter header images shipped in public/headers (doc 03 section 8.1),
+ * served by the app on both hosts: the public page renders them as covers,
+ * the builder previews them. Exact file names only, never a directory.
+ * Decision: `headers` needs no reserved alias, because `/headers` (a key)
+ * and `/headers/{id}.svg` (a file) never collide.
+ */
+export const STARTER_HEADER_PATH_RE = /^\/headers\/[a-z0-9-]{1,40}\.svg$/
+
 const PUBLIC_ALLOW: RegExp[] = [
   /^\/$/,
+  STARTER_HEADER_PATH_RE,
   KEY_RE,
   /^\/r\/[A-Za-z0-9_-]+$/, // shared report link (doc 04, R15)
   /^\/api\/public\//,
@@ -64,6 +74,7 @@ export function isPublicPathAllowed(path: string): boolean {
 export function isDashboardPathAllowed(path: string, opts: { dev: boolean }): boolean {
   if (path === '/') return true
   if (path === '/favicon.ico' || path === '/robots.txt') return true
+  if (STARTER_HEADER_PATH_RE.test(path)) return true
   if (path.startsWith('/api/public/')) return false
   if (path.startsWith('/api/')) return true
   const seg = firstSegment(path)

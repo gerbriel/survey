@@ -1,6 +1,8 @@
 import { z } from 'zod'
 import type { Enums, Json } from '@/types/db-helpers'
 import type { AdminClient, AnonClient } from '@/lib/supabase/types'
+import { normalizeCover } from '@/lib/survey/cover'
+import type { CoverImage } from '@/lib/survey/types'
 import { call, id } from './rpc'
 
 /**
@@ -77,7 +79,7 @@ export function getPublicDefinition(client: AnonClient, input: z.input<typeof ge
   )
 }
 
-export type OgCard = { surveyId: string; title: string; workspaceName: string; logoPath: string | null }
+export type OgCard = { surveyId: string; title: string; workspaceName: string; logoPath: string | null; cover: CoverImage | null }
 
 export const ogCardInput = z.object({ versionId: id })
 
@@ -97,7 +99,7 @@ export function ogCard(admin: AdminClient, input: z.input<typeof ogCardInput>) {
       if (!row) return null
       const r = row as unknown as {
         survey_id: string
-        public_definition: { settings?: { title?: unknown } } | null
+        public_definition: { settings?: { title?: unknown }; theme?: { cover_image?: unknown } } | null
         surveys: { title: string; archived_at: string | null } | null
         workspaces: { name: string; logo_path: string | null; deleted_at: string | null } | null
       }
@@ -108,6 +110,8 @@ export function ogCard(admin: AdminClient, input: z.input<typeof ogCardInput>) {
         title: typeof t === 'string' && t.trim() ? t : r.surveys.title,
         workspaceName: r.workspaces.name,
         logoPath: r.workspaces.logo_path,
+        // The theme's header image, either shape (doc 03 section 8.1).
+        cover: normalizeCover(r.public_definition?.theme?.cover_image),
       }
     },
   )

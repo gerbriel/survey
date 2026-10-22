@@ -1677,6 +1677,59 @@ export type Database = {
           },
         ]
       }
+      survey_assignments: {
+        Row: {
+          assigned_at: string
+          assigned_by: string | null
+          kind: string
+          survey_id: string
+          user_id: string
+          workspace_id: string
+        }
+        ComputedFields: never
+        Insert: {
+          assigned_at?: string
+          assigned_by?: string | null
+          kind: string
+          survey_id: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          assigned_at?: string
+          assigned_by?: string | null
+          kind?: string
+          survey_id?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "survey_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_assignments_survey_id_fkey"
+            columns: ["survey_id"]
+            referencedRelation: "surveys"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_assignments_user_id_fkey"
+            columns: ["user_id"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "survey_assignments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       survey_templates: {
         Row: {
           created_at: string
@@ -1920,6 +1973,68 @@ export type Database = {
           },
           {
             foreignKeyName: "surveys_workspace_id_fkey"
+            columns: ["workspace_id"]
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_images: {
+        Row: {
+          bytes: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          height: number | null
+          id: string
+          kind: string
+          label: string
+          mime: string
+          path: string
+          source: string
+          width: number | null
+          workspace_id: string
+        }
+        ComputedFields: never
+        Insert: {
+          bytes: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          height?: number | null
+          id?: string
+          kind?: string
+          label?: string
+          mime: string
+          path: string
+          source?: string
+          width?: number | null
+          workspace_id: string
+        }
+        Update: {
+          bytes?: number
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          height?: number | null
+          id?: string
+          kind?: string
+          label?: string
+          mime?: string
+          path?: string
+          source?: string
+          width?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_images_created_by_fkey"
+            columns: ["created_by"]
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_images_workspace_id_fkey"
             columns: ["workspace_id"]
             referencedRelation: "workspaces"
             referencedColumns: ["id"]
@@ -2312,6 +2427,26 @@ export type Database = {
     }
     Functions: {
       accept_workspace_invite: { Args: { p_token: string }; Returns: Json }
+      add_survey_collaborator: {
+        Args: { p_survey_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      add_workspace_member: {
+        Args: {
+          p_role: Database["public"]["Enums"]["workspace_role"]
+          p_user_id: string
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
+      admin_add_workspace_member: {
+        Args: {
+          p_role: Database["public"]["Enums"]["workspace_role"]
+          p_user_id: string
+          p_workspace_id: string
+        }
+        Returns: undefined
+      }
       admin_approve_access_request: {
         Args: { p_request_id: string }
         Returns: undefined
@@ -2358,12 +2493,24 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      admin_remove_workspace_member: {
+        Args: { p_user_id: string; p_workspace_id: string }
+        Returns: undefined
+      }
       admin_revoke_platform_invite: {
         Args: { p_invite_id: string }
         Returns: undefined
       }
       admin_set_abuse_report_status: {
         Args: { p_report_id: string; p_status: string }
+        Returns: undefined
+      }
+      admin_set_member_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["workspace_role"]
+          p_user_id: string
+          p_workspace_id: string
+        }
         Returns: undefined
       }
       admin_set_workspace_limits: {
@@ -2402,6 +2549,10 @@ export type Database = {
       archive_workspace: {
         Args: { p_workspace_id: string }
         Returns: undefined
+      }
+      assignable_member_role: {
+        Args: { p_role: Database["public"]["Enums"]["workspace_role"] }
+        Returns: Database["public"]["Enums"]["workspace_role"]
       }
       caller_role: {
         Args: { p_workspace_id: string }
@@ -2452,6 +2603,18 @@ export type Database = {
       }
       delete_response: { Args: { p_response_id: string }; Returns: undefined }
       delete_survey: { Args: { p_survey_id: string }; Returns: undefined }
+      delete_workspace_image: {
+        Args: { p_image_id: string }
+        Returns: undefined
+      }
+      directory_profiles: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          avatar_url: string
+          display_name: string
+          id: string
+        }[]
+      }
       effective_limits: {
         Args: { p_workspace_id: string }
         Returns: {
@@ -2529,9 +2692,41 @@ export type Database = {
         }[]
       }
       hash_share_password: { Args: { p_password: string }; Returns: string }
+      image_for_write: {
+        Args: { p_image_id: string }
+        Returns: {
+          bytes: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          height: number | null
+          id: string
+          kind: string
+          label: string
+          mime: string
+          path: string
+          source: string
+          width: number | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "workspace_images"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       import_contacts_chunk: {
         Args: { p_import_id: string; p_rows: Json }
         Returns: Json
+      }
+      insert_member_direct: {
+        Args: {
+          p_role: Database["public"]["Enums"]["workspace_role"]
+          p_user_id: string
+          p_workspace_id: string
+        }
+        Returns: undefined
       }
       invite_preview: {
         Args: { p_token: string }
@@ -2540,6 +2735,10 @@ export type Database = {
           role: Database["public"]["Enums"]["workspace_role"]
           workspace_name: string
         }[]
+      }
+      is_active_member: {
+        Args: { p_user: string; p_workspace_id: string }
+        Returns: boolean
       }
       is_active_profile: { Args: Record<PropertyKey, never>; Returns: boolean }
       is_member: {
@@ -2557,6 +2756,30 @@ export type Database = {
         Args: { p_doc: Json; p_keys: string[] }
         Returns: string
       }
+      list_workspace_images: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          bytes: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          height: number | null
+          id: string
+          kind: string
+          label: string
+          mime: string
+          path: string
+          source: string
+          width: number | null
+          workspace_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "workspace_images"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       log_export: {
         Args: {
           p_kind: string
@@ -2565,6 +2788,13 @@ export type Database = {
           p_workspace_id: string
         }
         Returns: undefined
+      }
+      member_owned_survey_counts: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          owned_surveys: number
+          user_id: string
+        }[]
       }
       merge_contacts: {
         Args: { p_field_choices?: Json; p_merged: string[]; p_survivor: string }
@@ -2612,7 +2842,45 @@ export type Database = {
         Returns: undefined
       }
       record_events: { Args: { p_events: Json }; Returns: number }
+      register_workspace_image: {
+        Args: {
+          p_bytes: number
+          p_height?: number
+          p_id: string
+          p_kind: string
+          p_label?: string
+          p_mime: string
+          p_path: string
+          p_width?: number
+          p_workspace_id: string
+        }
+        Returns: {
+          bytes: number
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          height: number | null
+          id: string
+          kind: string
+          label: string
+          mime: string
+          path: string
+          source: string
+          width: number | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "workspace_images"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       release_draft_lock: { Args: { p_version_id: string }; Returns: undefined }
+      remove_survey_collaborator: {
+        Args: { p_survey_id: string; p_user_id: string }
+        Returns: undefined
+      }
       rename_workspace_slug: {
         Args: { p_slug: string; p_workspace_id: string }
         Returns: undefined
@@ -2744,6 +3012,14 @@ export type Database = {
         Args: { p_alias: string; p_survey_id: string }
         Returns: undefined
       }
+      set_survey_owner: {
+        Args: { p_survey_id: string; p_user_id: string }
+        Returns: undefined
+      }
+      set_workspace_image_label: {
+        Args: { p_image_id: string; p_label: string }
+        Returns: undefined
+      }
       sha256_hex: { Args: { p_text: string }; Returns: string }
       shared_report_payload: {
         Args: { p_password: string; p_token: string }
@@ -2783,6 +3059,7 @@ export type Database = {
           state: string
         }[]
       }
+      survey_for_assignment: { Args: { p_survey_id: string }; Returns: string }
       take_draft_lock: {
         Args: { p_force?: boolean; p_version_id: string }
         Returns: Json

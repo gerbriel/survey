@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ExportButtons } from '@/components/analytics/ExportButtons'
+import { CompareWithLink } from '@/components/compare/CompareWithLink'
 import { FilterBar, type FilterQuestion } from '@/components/analytics/FilterBar'
 import { MetricView } from '@/components/analytics/MetricView'
 import { QuestionSummaryView } from '@/components/analytics/QuestionSummaryView'
@@ -129,6 +130,7 @@ function Header({ slug, id, title }: { slug: string; id: string; title: string }
         <Link className="text-accent underline" href={`/w/${slug}/surveys/${id}/responses`}>
           Responses
         </Link>
+        <CompareWithLink slug={slug} surveyId={id} />
       </nav>
     </header>
   )

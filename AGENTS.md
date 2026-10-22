@@ -105,13 +105,15 @@ Files:
 
 | File | Area | Clients |
 |---|---|---|
-| `workspaces.ts` | workspace reads, lifecycle functions, settings writes, logo storage, slug history, members (`listMembers`, `listMembersWithEmail`), activity log | user |
-| `profiles.ts` | profile read, `last_workspace_id`, `is_platform_admin` | user |
+| `workspaces.ts` | workspace reads, lifecycle functions, settings writes, logo storage, slug history, members (`listMembers`, `listMembersWithEmail`, `addWorkspaceMember`, `listMemberOwnedCounts`), activity log | user |
+| `profiles.ts` | profile read, `last_workspace_id`, `is_platform_admin`, `listDirectory` (`directory_profiles`, never email) | user |
+| `assignments.ts` | survey owner and collaborators (R19): `set_survey_owner`, `add_survey_collaborator`, `remove_survey_collaborator`, assignment reads, list filter helpers | user |
 | `invites.ts` | invite claiming, `invitePreview`, workspace invite links | user |
 | `admin.ts` | platform admin functions, self-auditing `admin_*` writes, `adminWorkspaceStats`, platform reads, access and workspace requests, purge (`workspacePurgeDue`, `purgeWorkspace`, `pendingStorageDeletions`), `privacyNotice` and `insertAbuseReport` for public routes, `insertPlatformAudit` for Auth admin API actions only | user, service role where noted |
 | `pixels.ts` | workspace pixels | user |
 | `surveys.ts` | create, alias, locks, autosave, survey and version reads, settings update | user (reads also service role) |
 | `templates.ts` | survey templates | user |
+- `src/lib/db/images.ts`: workspace image library (list, register, set label, soft delete), migration 0021.
 | `publish.ts` | `publish_survey_version` | user |
 | `publicRead.ts` | `resolve_public_survey`, `get_public_definition` (anon only), `ogCard` (service role) | anon, service role |
 | `submission.ts` | `submit_response`, `create_upload`, `rate_limit_hit`, published version and resume reads | service role |

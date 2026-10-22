@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { requirePlatformAdmin } from '@/lib/auth'
-import { listProfiles } from '@/lib/db/admin'
+import { listAllWorkspaces, listProfiles } from '@/lib/db/admin'
 import { listAuthUsers, membershipsByUser, type AuthUserSummary, type UserMembership } from '@/lib/admin/service'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { Badge } from '@/components/ui/Badge'
@@ -13,11 +13,20 @@ import { InlineAction } from '@/components/dashboard/InlineAction'
 import { PageHeader } from '@/components/dashboard/PageHeader'
 import { roleLabel } from '@/components/dashboard/RoleBadge'
 import { ResetLinkForm } from '@/components/admin/AdminForms'
-import { mintResetLink, setUserActive } from '../actions'
+import {
+  adminAddMemberAction,
+  adminRemoveMemberAction,
+  adminSetMemberRoleAction,
+  mintResetLink,
+  setUserActive,
+} from '../actions'
 
 export const metadata: Metadata = { title: 'Users' }
 
 const STATUS_TONE = { active: 'success', pending: 'warning', disabled: 'danger', deleted: 'neutral' } as const
+
+// R20: never owner here; ownership moves only through a transfer.
+const ROLE_OPTIONS = (['admin', 'editor', 'viewer'] as const).map((r) => ({ value: r, label: roleLabel(r) }))
 
 /** Users: search, status, memberships, reset link, deactivate (doc 05 section 6). */
 export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -27,11 +36,13 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
   const statusParam = typeof sp.status === 'string' ? sp.status : ''
   const status = (['pending', 'active', 'disabled', 'deleted'] as const).find((s) => s === statusParam)
 
-  const [profiles, users, memberships] = await Promise.all([
+  const [profiles, users, memberships, workspaces] = await Promise.all([
     listProfiles(ctx.supabase, status ? { status } : {}),
     listAuthUsers(),
     membershipsByUser(),
+    listAllWorkspaces(ctx.supabase),
   ])
+  const liveWorkspaces = (workspaces.ok ? workspaces.data : []).filter((w) => w.deleted_at === null)
   const emails = users.ok ? users.data : new Map<string, AuthUserSummary>()
   const mem = memberships.ok ? memberships.data : new Map<string, UserMembership[]>()
   const rows = (profiles.ok ? profiles.data : []).filter((p) => {
@@ -102,10 +113,41 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   {ms.length === 0 ? (
                     <span className="text-muted">None</span>
                   ) : (
-                    <ul className="text-xs">
+                    <ul className="flex flex-col gap-2 text-xs">
                       {ms.map((m) => (
                         <li key={m.workspaceId}>
-                          {m.name} ({roleLabel(m.role)})
+                          <div>
+                            {m.name} ({roleLabel(m.role)})
+                          </div>
+                          {m.role !== 'owner' ? (
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <InlineAction
+                                action={adminSetMemberRoleAction}
+                                fields={{ workspaceId: m.workspaceId, userId: p.id }}
+                                label="Change role"
+                              >
+                                <div className="w-28">
+                                  <Select
+                                    label={
+                                      <span className="sr-only">
+                                        Role for {p.display_name} in {m.name}
+                                      </span>
+                                    }
+                                    name="role"
+                                    defaultValue={m.role}
+                                    options={ROLE_OPTIONS}
+                                  />
+                                </div>
+                              </InlineAction>
+                              <InlineAction
+                                action={adminRemoveMemberAction}
+                                fields={{ workspaceId: m.workspaceId, userId: p.id }}
+                                label="Remove"
+                                variant="danger"
+                                confirm={`Remove ${p.display_name} from ${m.name}? Surveys they own move to the workspace owner. Logged in the platform audit log.`}
+                              />
+                            </div>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -130,6 +172,27 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                     ) : null}
                     {p.status === 'disabled' ? (
                       <InlineAction action={setUserActive} fields={{ userId: p.id, active: 'true' }} label="Reactivate" />
+                    ) : null}
+                    {p.status === 'active' && liveWorkspaces.some((w) => !ms.some((m) => m.workspaceId === w.id)) ? (
+                      <details className="text-sm">
+                        <summary className="cursor-pointer text-accent underline underline-offset-2">Add to workspace</summary>
+                        <div className="mt-2 flex flex-col gap-2">
+                          <InlineAction action={adminAddMemberAction} fields={{ userId: p.id }} label="Add">
+                            <div className="flex w-full flex-col gap-2">
+                              <Select
+                                label="Workspace"
+                                name="workspaceId"
+                                required
+                                placeholder="Pick a workspace"
+                                options={liveWorkspaces
+                                  .filter((w) => !ms.some((m) => m.workspaceId === w.id))
+                                  .map((w) => ({ value: w.id, label: w.archived_at ? `${w.name} (archived)` : w.name }))}
+                              />
+                              <Select label="Role" name="role" required defaultValue="editor" options={ROLE_OPTIONS} />
+                            </div>
+                          </InlineAction>
+                        </div>
+                      </details>
                     ) : null}
                   </div>
                 </Td>

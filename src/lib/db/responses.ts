@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { Json, Tables } from '@/types/db-helpers'
 import type { UserClient, UserOrAdminClient } from '@/lib/supabase/types'
 import { fail, ok, toDbError, type DbResult } from './errors'
-import { asJson, call, chunks, id, PAGE, readAll, type PageResult } from './rpc'
+import { asJson, call, chunks, id, ilikePattern, PAGE, readAll, type PageResult } from './rpc'
 
 /**
  * Response queries for inbox, reports and exports (migration 0013, doc 04
@@ -385,4 +385,68 @@ export function signResponseFile(client: UserClient, input: z.input<typeof signI
     (v) => client.storage.from('response-files').createSignedUrl(v.path, v.seconds, v.download ? { download: v.name } : undefined),
     (d): string => d!.signedUrl,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Results hub (cross-survey explorer) and bulk export. filtered_responses is
+// per survey; the hub calls it once per selected survey. The existing reads
+// cannot express a metadata or partial-only condition or an open-text search,
+// so these two add them. Both run as the member (RLS applies).
+// ---------------------------------------------------------------------------
+
+/** Columns PostgREST may compare on: status, a top level metadata key, or a hidden field. */
+const RESULT_CONDITION_COLUMN = /^(status|metadata->>[A-Za-z0-9_]{1,64}|metadata->hidden->>[A-Za-z0-9_]{1,64})$/
+
+export const resultRowsInput = z.object({
+  surveyId: id,
+  filters: z.record(z.string(), z.unknown()).default({}),
+  where: z.array(z.object({ column: z.string().regex(RESULT_CONDITION_COLUMN), value: z.string().max(200) })).max(4).default([]),
+  max: z.number().int().min(1).max(200_000).default(20_000),
+})
+
+/** A results hub row: the inbox columns (survey id, contact name and email, metadata). */
+export type ResultRow = InboxRow
+
+/**
+ * filtered_responses for one survey plus equality conditions on the returned
+ * rows (partial status, metadata keys), in id order pages, at most `max`.
+ */
+export async function readResultRows(client: UserClient, input: z.input<typeof resultRowsInput>): Promise<DbResult<ResultRow[]>> {
+  const parsed = resultRowsInput.safeParse(input)
+  if (!parsed.success) return call(resultRowsInput, input, async () => ({ data: null, error: null }))
+  const v = parsed.data
+  return readAll((from, to) => {
+    let q = client.rpc('filtered_responses', { p_survey_id: v.surveyId, p_filters: asJson(v.filters) }).select(INBOX_COLUMNS)
+    for (const c of v.where) q = q.eq(c.column, c.value)
+    return q.order('id').range(from, to) as unknown as PageResult<ResultRow>
+  }, v.max)
+}
+
+export const textSearchInput = z.object({
+  surveyIds: z.array(id).min(1).max(50),
+  questionKeys: z.array(z.string().min(1).max(64)).min(1).max(500),
+  text: z.string().trim().min(2).max(100),
+  limit: z.number().int().min(1).max(5000).default(2000),
+})
+
+/**
+ * Response ids whose open-text answers contain `text` (case-insensitive
+ * substring, wildcards escaped). Bounded by `limit` answer rows; `capped`
+ * says the bound was hit, so the caller can tell the member.
+ */
+export async function searchTextAnswers(
+  client: UserClient,
+  input: z.input<typeof textSearchInput>,
+): Promise<DbResult<{ responseIds: string[]; capped: boolean }>> {
+  return call(textSearchInput, input, async (v) => {
+    const r = await client
+      .from('answers')
+      .select('response_id')
+      .in('survey_id', v.surveyIds)
+      .in('question_key', v.questionKeys)
+      .ilike('value_text', ilikePattern(v.text))
+      .limit(v.limit)
+    const rows = (r.data ?? []) as { response_id: string }[]
+    return { data: { responseIds: [...new Set(rows.map((x) => x.response_id))], capped: rows.length >= v.limit }, error: r.error }
+  })
 }

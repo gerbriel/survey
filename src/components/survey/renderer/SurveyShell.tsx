@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import type { Theme } from '@/lib/survey'
+import { coverSrc, normalizeCover, type Theme } from '@/lib/survey'
 import { cx } from '@/components/ui/cx'
 
 const LOGO_SIZE = { sm: 'h-8', md: 'h-12', lg: 'h-16' } as const
@@ -38,7 +38,9 @@ export function SurveyShell({
   children: ReactNode
 }) {
   const logo = logoSrc(theme, logoUrl, resolveAssetUrl)
-  const cover = theme.cover_image ? resolveAssetUrl?.(theme.cover_image.path) : null
+  // Starter covers come from the app's /headers path, library and upload covers through resolveAssetUrl (doc 03 section 8.1).
+  const coverImage = normalizeCover(theme.cover_image)
+  const cover = coverSrc(coverImage, resolveAssetUrl)
   const bgImage = theme.background.kind === 'image' ? resolveAssetUrl?.(theme.background.path) : null
   const overlay = theme.background.kind === 'image' ? theme.background.overlay_opacity : 0
   const card = theme.layout === 'card'
@@ -50,13 +52,13 @@ export function SurveyShell({
       {bgImage ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: overlay }} /> : null}
       <div className="relative flex flex-1 flex-col">
         {banner}
-        {cover && theme.cover_image ? (
-          // eslint-disable-next-line @next/next/no-img-element -- Storage URL from the caller.
+        {cover && coverImage ? (
+          // eslint-disable-next-line @next/next/no-img-element -- Storage URL from the caller or an app starter.
           <img
             src={cover}
             alt=""
-            className={cx('w-full object-cover', theme.cover_image.height === 'tall' ? 'h-64' : 'h-32')}
-            style={{ objectPosition: `50% ${Math.round(theme.cover_image.focal_y * 100)}%` }}
+            className={cx('w-full object-cover', coverImage.height === 'tall' ? 'h-64' : 'h-32')}
+            style={{ objectPosition: `50% ${Math.round(coverImage.focal_y * 100)}%` }}
           />
         ) : null}
         <div className={cx('mx-auto flex w-full flex-1 flex-col gap-4 px-4 py-6', card ? 'max-w-2xl' : 'max-w-3xl')}>

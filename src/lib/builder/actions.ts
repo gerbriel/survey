@@ -7,7 +7,8 @@
  * session check here only produces a friendly error.
  */
 
-import { getAuthContext } from '@/lib/auth/guards'
+import { getAuthContext, requireMember } from '@/lib/auth/guards'
+import { memberCan } from '@/lib/auth/roles'
 import { getProfile } from '@/lib/db/profiles'
 import { getWorkspaceById } from '@/lib/db/workspaces'
 import { getEffectiveLimits } from '@/lib/db/limits'
@@ -30,6 +31,7 @@ import { insertTemplate } from '@/lib/db/templates'
 import { listContactFields } from '@/lib/db/contacts'
 import { listPixelSummaries } from '@/lib/db/pixels'
 import type { ActionResult, DraftSnapshot, LockInfo, PublishOutcome } from './types'
+import { cleanBulkIds, runBulk, type BulkResult } from './list'
 
 function failed<T>(e: { code: DbError['code'] | string; message: string }): ActionResult<T> {
   return { ok: false, code: e.code, message: e.message }
@@ -89,20 +91,63 @@ async function createFromDefinition(client: UserClient, workspaceId: string, tit
 export async function duplicateSurveyAction(surveyId: string): Promise<ActionResult<string>> {
   const s = await session()
   if (!s) return failed(EXPIRED)
-  const survey = await getSurvey(s.client, { surveyId })
+  return duplicateOne(s.client, surveyId)
+}
+
+const NOT_FOUND = { code: 'not_found', message: 'That survey was not found.' }
+
+/** `workspaceId`, when given, makes a survey of another workspace read as not found (D-15). */
+async function duplicateOne(client: UserClient, surveyId: string, workspaceId?: string): Promise<ActionResult<string>> {
+  const survey = await getSurvey(client, { surveyId, ...(workspaceId ? { workspaceId } : {}) })
   if (!survey.ok) return from(survey)
-  if (!survey.data?.current_draft_version_id) return failed({ code: 'not_found', message: 'That survey was not found.' })
-  const v = await getVersion(s.client, { versionId: survey.data.current_draft_version_id })
+  if (!survey.data?.current_draft_version_id) return failed(NOT_FOUND)
+  const v = await getVersion(client, { versionId: survey.data.current_draft_version_id })
   if (!v.ok) return from(v)
-  if (!v.data) return failed({ code: 'not_found', message: 'That survey was not found.' })
+  if (!v.data) return failed(NOT_FOUND)
   const title = `Copy of ${survey.data.title}`.slice(0, 200)
-  return from(await createFromDefinition(s.client, survey.data.workspace_id, title, v.data.definition as Def))
+  return from(await createFromDefinition(client, survey.data.workspace_id, title, v.data.definition as Def))
 }
 
 export async function archiveSurveyAction(surveyId: string, archived: boolean): Promise<ActionResult<undefined>> {
   const s = await session()
   if (!s) return failed(EXPIRED)
   return from(await setSurveyArchived(s.client, { surveyId, archived }))
+}
+
+/**
+ * Bulk actions for the surveys list. Editor and above (UX check; RLS and the
+ * SQL functions decide). Each id is checked against the workspace in the slug
+ * and handled one at a time with the single-survey logic; the result lists
+ * every survey so failures are reported per survey.
+ */
+async function bulk(
+  slug: string,
+  surveyIds: string[],
+  fn: (client: UserClient, workspaceId: string, id: string) => Promise<{ ok: boolean; message?: string; newId?: string }>,
+): Promise<ActionResult<BulkResult>> {
+  const member = await requireMember(slug, 'viewer')
+  if (!memberCan(member.role, 'editor', member.workspace)) return failed({ code: 'permission_denied', message: 'Editors and above can change surveys in bulk.' })
+  const ids = cleanBulkIds(surveyIds)
+  if (ids.length === 0) return failed({ code: 'invalid_input', message: 'Select at least one survey.' })
+  return { ok: true, data: await runBulk(ids, (id) => fn(member.supabase, member.workspace.id, id)) }
+}
+
+export async function bulkDuplicateSurveysAction(slug: string, surveyIds: string[]): Promise<ActionResult<BulkResult>> {
+  return bulk(slug, surveyIds, async (client, workspaceId, id) => {
+    const r = await duplicateOne(client, id, workspaceId)
+    return r.ok ? { ok: true, newId: r.data } : { ok: false, message: r.message }
+  })
+}
+
+/** `archived` false restores (the archived view). */
+export async function bulkArchiveSurveysAction(slug: string, surveyIds: string[], archived: boolean): Promise<ActionResult<BulkResult>> {
+  return bulk(slug, surveyIds, async (client, workspaceId, id) => {
+    const found = await getSurvey(client, { surveyId: id, workspaceId })
+    if (!found.ok) return { ok: false, message: found.error.message }
+    if (!found.data) return { ok: false, message: NOT_FOUND.message }
+    const r = await setSurveyArchived(client, { surveyId: id, archived })
+    return r.ok ? { ok: true } : { ok: false, message: r.error.message }
+  })
 }
 
 export async function saveDraftAction(versionId: string, expectedRevision: number, definition: Def): Promise<ActionResult<number>> {

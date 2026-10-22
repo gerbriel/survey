@@ -3,6 +3,7 @@
 import { useActionState } from 'react'
 import type { WorkspaceRole } from '@/types/db-helpers'
 import { Select } from '@/components/ui/Select'
+import { PersonPicker, type PickerPerson } from '@/components/dashboard/PersonPicker'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
 import { FormStatus, SubmitButton } from '@/components/dashboard/form'
 import { InlineAction } from '@/components/dashboard/InlineAction'
@@ -21,6 +22,8 @@ export type MemberView = {
   role: WorkspaceRole
   joined: string
   inviteLabel: string | null
+  /** Live surveys this member owns (R19); undefined when the count could not be read. */
+  ownedSurveys?: number
 }
 
 function RoleForm({ action, member, roles }: { action: Action; member: MemberView; roles: WorkspaceRole[] }) {
@@ -67,6 +70,7 @@ export function MembersTable({
           <Th>Member</Th>
           <Th>Role</Th>
           <Th>Joined</Th>
+          <Th>Owns surveys</Th>
           <Th>
             <span className="sr-only">Actions</span>
           </Th>
@@ -101,6 +105,7 @@ export function MembersTable({
               </Td>
               <Td>{roles.length ? <RoleForm action={changeRole} member={m} roles={roles} /> : <RoleBadge role={m.role} />}</Td>
               <Td className="whitespace-nowrap">{m.joined}</Td>
+              <Td>{m.ownedSurveys ?? <span className="text-muted">Unknown</span>}</Td>
               <Td>
                 {removable ? (
                   <InlineAction
@@ -143,6 +148,41 @@ export function TransferOwnershipForm({ action, candidates }: { action: Action; 
       <FormStatus state={state} />
       <div>
         <SubmitButton variant="danger">Transfer ownership</SubmitButton>
+      </div>
+    </form>
+  )
+}
+
+/**
+ * Owner and admin: add an existing active user from the directory (R20).
+ * The directory carries display names only, never email. Roles offered
+ * follow directAddRoles; that is UX only, add_workspace_member refuses
+ * anything above the caller or owner.
+ */
+export function AddExistingUserForm({
+  action,
+  people,
+  roles,
+}: {
+  action: Action
+  people: PickerPerson[]
+  roles: WorkspaceRole[]
+}) {
+  const [state, run] = useActionState(action, IDLE)
+  if (people.length === 0) return <p className="text-sm text-muted">Everyone with an active account is already a member.</p>
+  return (
+    <form action={run} className="flex max-w-md flex-col gap-3">
+      <PersonPicker people={people} name="userId" label="Person" placeholder="Pick a person" />
+      <Select
+        label="Role"
+        name="role"
+        required
+        defaultValue={roles.includes('editor') ? 'editor' : roles[0]}
+        options={roles.map((r) => ({ value: r, label: roleLabel(r) }))}
+      />
+      <FormStatus state={state} />
+      <div>
+        <SubmitButton>Add to workspace</SubmitButton>
       </div>
     </form>
   )

@@ -51,3 +51,27 @@ export async function buildXlsx(input: XlsxInput): Promise<Buffer> {
 }
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+/** One worksheet for buildWorkbook: header rows are bold and frozen. */
+export type SheetSpec = { name: string; headerRows: (string | number)[][]; rows: (string | number)[][] }
+
+/**
+ * Any number of sheets, same injection guard (bulk export, Compare). Pure
+ * apart from exceljs; built in memory like buildXlsx.
+ */
+export async function buildWorkbook(sheets: SheetSpec[]): Promise<Buffer> {
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Survey'
+  wb.created = new Date()
+  for (const s of sheets) {
+    const ws = wb.addWorksheet(s.name)
+    for (const h of s.headerRows) ws.addRow(h.map(cell))
+    if (s.headerRows.length) {
+      ws.getRow(1).font = { bold: true }
+      ws.views = [{ state: 'frozen', ySplit: s.headerRows.length }]
+    }
+    for (const r of s.rows) ws.addRow(r.map(cell))
+  }
+  const out = await wb.xlsx.writeBuffer()
+  return Buffer.from(out as ArrayBuffer)
+}

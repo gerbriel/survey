@@ -25,3 +25,13 @@ export function invitableRoles(actor: WorkspaceRole): Array<'admin' | 'editor' |
   if (actor === 'admin') return ['editor', 'viewer']
   return []
 }
+
+/**
+ * Roles the owner or an admin may give when adding an existing user directly
+ * (R20, add_workspace_member): at or below their own role, never owner. So
+ * an admin may add another admin here, unlike invite links.
+ */
+export function directAddRoles(actor: WorkspaceRole): Array<'admin' | 'editor' | 'viewer'> {
+  if (actor === 'owner' || actor === 'admin') return ['admin', 'editor', 'viewer']
+  return []
+}

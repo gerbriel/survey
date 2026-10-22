@@ -420,6 +420,37 @@ export function removeMember(client: UserClient, input: z.input<typeof removeMem
   )
 }
 
+export const addWorkspaceMemberInput = z.object({
+  workspaceId: id,
+  userId: id,
+  role: workspaceRole.exclude(['owner']),
+})
+
+/**
+ * R20 (migration 0020): owner or admin adds an existing active user with a
+ * role at or below their own, never owner. Raises invalid_role,
+ * target_not_active, already_member. Writes activity_log ('member', 'add').
+ */
+export function addWorkspaceMember(client: UserClient, input: z.input<typeof addWorkspaceMemberInput>) {
+  return call(
+    addWorkspaceMemberInput,
+    input,
+    (v) =>
+      client.rpc('add_workspace_member', { p_workspace_id: v.workspaceId, p_user_id: v.userId, p_role: v.role }),
+    () => undefined,
+  )
+}
+
+/** Live (not archived) surveys each member owns (member_owned_survey_counts, migration 0020), keyed by user id. */
+export function listMemberOwnedCounts(client: UserClient, input: z.input<typeof workspaceIdInput>) {
+  return call(
+    workspaceIdInput,
+    input,
+    (v) => client.rpc('member_owned_survey_counts', { p_workspace_id: v.workspaceId }),
+    (rows): Map<string, number> => new Map((rows ?? []).map((r) => [r.user_id, r.owned_surveys])),
+  )
+}
+
 // ---------------------------------------------------------------------------
 // Activity log viewer (doc 05 section 5.7). RLS: admin and owner read.
 // ---------------------------------------------------------------------------

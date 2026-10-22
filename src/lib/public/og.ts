@@ -2,6 +2,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { ogCard, type OgCard } from '@/lib/db/publicRead'
+import { coverOgSrc } from '@/lib/survey/cover'
 import { clientIp } from './http'
 import { KEY_RE, publicAssetUrl, resolveSurvey } from './load'
 import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret } from './ratelimit'
@@ -19,7 +20,7 @@ import { checkRateLimits, hashIp, RATE_LIMITS, rateLimitSecret } from './ratelim
  * for at most 60 seconds.
  */
 
-export type OgCardData = OgCard & { logoUrl: string | null }
+export type OgCardData = OgCard & { logoUrl: string | null; coverUrl: string | null }
 
 const MISS = 'og-card-miss'
 
@@ -29,9 +30,10 @@ const cached = unstable_cache(
     if (!r.ok) throw new Error(`og card lookup failed: ${r.error.code}`)
     // L7: throw on a miss so null is never cached.
     if (!r.data) throw new Error(MISS)
-    return { ...r.data, logoUrl: publicAssetUrl(r.data.logoPath) }
+    // The theme's header image as a band across the top: starter or public-assets only (doc 03 section 8.1).
+    return { ...r.data, logoUrl: publicAssetUrl(r.data.logoPath), coverUrl: coverOgSrc(r.data.cover, publicAssetUrl) }
   },
-  ['public-og-card-v2'],
+  ['public-og-card-v3'],
   { revalidate: false },
 )
 

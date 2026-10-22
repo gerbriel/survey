@@ -1,6 +1,6 @@
 import type { Tables } from '@/types/db-helpers'
 import type { UserClient } from '@/lib/supabase/types'
-import { call, id } from './rpc'
+import { call, id, readAll } from './rpc'
 import { z } from 'zod'
 
 /**
@@ -40,5 +40,22 @@ export function isPlatformAdmin(client: UserClient) {
     undefined,
     () => client.rpc('is_platform_admin'),
     (v): boolean => v === true,
+  )
+}
+
+/** One person in the organization directory (R20). Never an email. */
+export type DirectoryProfile = { id: string; display_name: string; avatar_url: string | null }
+
+/**
+ * directory_profiles() (migration 0020): display name and avatar of every
+ * active profile, for "Add existing user" pickers. Active callers only.
+ * Read in pages of 1000 (PostgREST max_rows).
+ */
+export function listDirectory(client: UserClient) {
+  return readAll<DirectoryProfile>((from, to) =>
+    client
+      .rpc('directory_profiles')
+      .range(from, to)
+      .then((r) => ({ data: (r.data ?? null) as DirectoryProfile[] | null, error: r.error })),
   )
 }

@@ -6,6 +6,7 @@ import type { NavLink } from './nav-links'
 /** Settings sections and the minimum role that sees each one (doc 05 section 2.3). */
 export const SETTINGS_SECTIONS: Array<{ segment: string; label: string; minRole: WorkspaceRole }> = [
   { segment: 'general', label: 'General', minRole: 'viewer' },
+  { segment: 'images', label: 'Images', minRole: 'viewer' },
   { segment: 'members', label: 'Members', minRole: 'viewer' },
   { segment: 'invites', label: 'Invites', minRole: 'admin' },
   { segment: 'pixels', label: 'Tracking pixels', minRole: 'editor' },

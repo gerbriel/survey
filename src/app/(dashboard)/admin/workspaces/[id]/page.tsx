@@ -4,8 +4,8 @@ import { notFound } from 'next/navigation'
 import { requirePlatformAdmin } from '@/lib/auth'
 import { getEffectiveLimits } from '@/lib/db/limits'
 import { getWorkspaceById } from '@/lib/db/workspaces'
-import { getWorkspaceLimitsRow } from '@/lib/db/admin'
-import { workspaceMembersForAdmin } from '@/lib/admin/service'
+import { getWorkspaceLimitsRow, listProfiles } from '@/lib/db/admin'
+import { listAuthUsers, workspaceMembersForAdmin } from '@/lib/admin/service'
 import {
   canRequestDeletion,
   canRestore,
@@ -21,8 +21,10 @@ import { roleLabel } from '@/components/dashboard/RoleBadge'
 import { LimitsEditor } from '@/components/admin/AdminForms'
 import { AdminLifecycle, ForceTransferForm } from '@/components/admin/AdminLifecycle'
 import { LimitsTable } from '@/components/settings/LimitsTable'
+import { AddExistingUserForm } from '@/components/settings/MembersTable'
 import { limitRows } from '@/components/settings/limits-view'
 import {
+  adminAddMemberToWorkspace,
   adminArchive,
   adminForceTransfer,
   adminRequestDeletion,
@@ -62,12 +64,20 @@ export default async function AdminWorkspacePage({
   const ws = await getWorkspaceById(supabase, { workspaceId: id })
   if (!ws.ok || !ws.data) notFound()
   const w = ws.data
-  const [limitsRow, effective, members] = await Promise.all([
+  const [limitsRow, effective, members, profiles, authUsers] = await Promise.all([
     getWorkspaceLimitsRow(supabase, { workspaceId: id }),
     getEffectiveLimits(supabase, { workspaceId: id }),
     workspaceMembersForAdmin(id),
+    listProfiles(supabase, { status: 'active' }),
+    listAuthUsers(),
   ])
   const memberList = members.ok ? members.data : []
+  const memberIds = new Set(memberList.map((m) => m.user_id))
+  // Platform admins see the sign-in email (Auth admin API, R20); the member directory never carries it.
+  const emails = authUsers.ok ? authUsers.data : null
+  const addable = (profiles.ok ? profiles.data : [])
+    .filter((p) => !memberIds.has(p.id))
+    .map((p) => ({ id: p.id, name: p.display_name, detail: emails?.get(p.id)?.email ?? null }))
   const owner = memberList.find((m) => m.role === 'owner')
   const candidates = memberList
     .filter((m) => m.role !== 'owner' && m.status === 'active')
@@ -116,6 +126,23 @@ export default async function AdminWorkspacePage({
             restore={adminRestore.bind(null, id)}
           />
         </section>
+        {!w.deleted_at ? (
+          <section aria-labelledby="add-member" className="flex flex-col gap-4">
+            <h2 id="add-member" className="text-lg font-semibold">
+              Add member
+            </h2>
+            <p className="text-sm text-muted">
+              Any active user, any role but owner. Logged in the platform audit log and the workspace activity log.
+            </p>
+            {!profiles.ok ? (
+              <p role="alert" className="text-sm text-danger">
+                {profiles.error.message}
+              </p>
+            ) : (
+              <AddExistingUserForm action={adminAddMemberToWorkspace.bind(null, id)} people={addable} roles={['admin', 'editor', 'viewer']} />
+            )}
+          </section>
+        ) : null}
         {!w.deleted_at ? (
           <section aria-labelledby="transfer" className="flex flex-col gap-4">
             <h2 id="transfer" className="text-lg font-semibold">

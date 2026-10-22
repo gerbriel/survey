@@ -20,6 +20,9 @@ import {
   updatePrivacyNoticeInput,
   adminDismissAccessRequest,
   adminDismissWorkspaceRequest,
+  adminAddWorkspaceMember,
+  adminRemoveWorkspaceMember,
+  adminSetMemberRole,
 } from '@/lib/db/admin'
 import {
   archiveWorkspace,
@@ -180,6 +183,60 @@ export async function adminForceTransfer(workspaceId: string, _prev: ActionState
   if (!r.ok) return fromDbError(r.error)
   revalidatePath('/admin', 'layout')
   return success('Ownership transferred. The previous owner is now an admin.')
+}
+
+// --- direct membership (R20) -------------------------------------------------
+// The admin_* functions check is_platform_admin(), refuse the owner role and
+// write platform_audit_log; requirePlatformAdmin here is the UX guard.
+
+const memberRole = z.enum(['admin', 'editor', 'viewer'])
+
+async function addMember(workspaceId: unknown, form: FormData): Promise<ActionState> {
+  const ctx = await requirePlatformAdmin()
+  const ws = uuid.safeParse(workspaceId)
+  const user = idFrom(form, 'userId')
+  const role = memberRole.safeParse(form.get('role'))
+  if (!ws.success) return failure('Pick a workspace.', { workspaceId: 'Required.' })
+  if (!user.success) return failure('Pick a person.', { userId: 'Required.' })
+  if (!role.success) return failure('Pick a role. Owner changes only through a transfer.', { role: 'Required.' })
+  const r = await adminAddWorkspaceMember(ctx.supabase, { workspaceId: ws.data, userId: user.data, role: role.data })
+  if (!r.ok) return fromDbError(r.error)
+  revalidatePath('/admin', 'layout')
+  return success('Added to the workspace.')
+}
+
+/** /admin/users: workspace id comes from the form. */
+export async function adminAddMemberAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  return addMember(form.get('workspaceId'), form)
+}
+
+/** /admin/workspaces/[id]: bound to the workspace. */
+export async function adminAddMemberToWorkspace(workspaceId: string, _prev: ActionState, form: FormData): Promise<ActionState> {
+  return addMember(workspaceId, form)
+}
+
+export async function adminRemoveMemberAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const ctx = await requirePlatformAdmin()
+  const ws = idFrom(form, 'workspaceId')
+  const user = idFrom(form, 'userId')
+  if (!ws.success || !user.success) return failure('Pick a membership.')
+  const r = await adminRemoveWorkspaceMember(ctx.supabase, { workspaceId: ws.data, userId: user.data })
+  if (!r.ok) return fromDbError(r.error)
+  revalidatePath('/admin', 'layout')
+  return success('Removed. Surveys they owned now belong to the workspace owner.')
+}
+
+export async function adminSetMemberRoleAction(_prev: ActionState, form: FormData): Promise<ActionState> {
+  const ctx = await requirePlatformAdmin()
+  const ws = idFrom(form, 'workspaceId')
+  const user = idFrom(form, 'userId')
+  const role = memberRole.safeParse(form.get('role'))
+  if (!ws.success || !user.success) return failure('Pick a membership.')
+  if (!role.success) return failure('Pick a role. Owner changes only through a transfer.')
+  const r = await adminSetMemberRole(ctx.supabase, { workspaceId: ws.data, userId: user.data, role: role.data })
+  if (!r.ok) return fromDbError(r.error)
+  revalidatePath('/admin', 'layout')
+  return success('Role updated.')
 }
 
 // --- users -----------------------------------------------------------------

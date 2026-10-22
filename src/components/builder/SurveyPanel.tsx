@@ -52,6 +52,7 @@ export function SurveyPanel({
   hasWorkspaceLogo,
   workspaceId,
   surveyId,
+  imageUploadUrl,
 }: {
   definition: SurveyDefinition
   commit: Commit
@@ -61,6 +62,7 @@ export function SurveyPanel({
   hasWorkspaceLogo: boolean
   workspaceId: string
   surveyId: string
+  imageUploadUrl?: string | null
 }) {
   const [tab, setTab] = useState('settings')
   const s = def.settings
@@ -236,6 +238,7 @@ export function SurveyPanel({
                 hasWorkspaceLogo={hasWorkspaceLogo}
                 workspaceId={workspaceId}
                 surveyId={surveyId}
+                imageUploadUrl={imageUploadUrl}
                 onChange={(theme, key) => commit({ ...def, theme }, key)}
                 onReset={() => commit({ ...def, theme: workspaceTheme })}
               />

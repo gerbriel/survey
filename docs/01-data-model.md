@@ -1203,6 +1203,23 @@ multi_choice_ids(p_json jsonb) returns jsonb                                    
 ```
 `log_export` needs editor for row level kinds (`responses`, `contacts`) and viewer for aggregate kinds (`summary`, `report`), matching doc 05. `finish_import` sets `status` (`done` or `failed`), `finished_at`, and any counts given. The `admin_*` functions check `is_platform_admin()` and write `platform_audit_log` themselves. `report_share_gate` returns `not_found`, `needs_password` or `open` (with the report id) and counts the view; `shared_report_payload` no longer counts views. Changed in place: `answer_row` (multiple_choice `{ids, other}`), `resolve_public_survey` (adds `workspace_id`), `filtered_responses` (contact custom field filters), `shared_report_payload` (matrix labels), `reserved_public_segments` (adds `welcome`).
 
+### Assignments (R19, R20)
+
+Added by migration 0020. Table `survey_assignments(survey_id, workspace_id, user_id, kind, assigned_by, assigned_at)`, primary key `(survey_id, user_id)`, `kind` in `owner` or `collaborator`, partial unique index `survey_one_owner`, cascades from surveys, workspaces and profiles. Members read under RLS; there is no client write path. The guard copies `workspace_id` from the survey and refuses an assignee who is not an active member (`assignee_not_member`). The creator becomes the owner (after insert trigger on `surveys`; `create_survey` is unchanged), and the migration backfills existing surveys whose creator is still an active member.
+
+```sql
+set_survey_owner(p_survey_id uuid, p_user_id uuid) returns void              -- editor; previous owner stays as collaborator
+add_survey_collaborator(p_survey_id uuid, p_user_id uuid) returns void       -- editor; no-op if already one
+remove_survey_collaborator(p_survey_id uuid, p_user_id uuid) returns void    -- editor; no-op if not one
+member_owned_survey_counts(p_workspace_id uuid) returns table (user_id, owned_surveys)   -- viewer; live surveys only
+directory_profiles() returns table (id, display_name, avatar_url)           -- active callers; active profiles; never email
+add_workspace_member(p_workspace_id uuid, p_user_id uuid, p_role workspace_role) returns void          -- owner or admin, role at or below caller, never owner
+admin_add_workspace_member(p_workspace_id uuid, p_user_id uuid, p_role workspace_role) returns void    -- PA, never owner
+admin_remove_workspace_member(p_workspace_id uuid, p_user_id uuid) returns void                        -- PA, never the owner
+admin_set_member_role(p_workspace_id uuid, p_user_id uuid, p_role workspace_role) returns void         -- PA, never owner
+```
+Assignment functions write `activity_log` (entity `survey`, actions `assignment.owner`, `assignment.collaborator_add`, `assignment.collaborator_remove`, `assignment.reassign`); `add_workspace_member` writes `member` `add`; the `admin_*` functions write `platform_audit_log` (`member.add`, `member.remove`, `member.role_change`). An after delete trigger on `workspace_members` drops the leaver's collaborator rows and moves surveys they owned to the remover, or to the workspace owner when they left on their own or the remover is not a member. New error codes: `assignee_not_member`, `invalid_role`, `already_member`, `target_not_active`.
+
 ## 13. Scheduled jobs (R3)
 
 Two runners with a clear line: pg_cron runs pure SQL that never touches Storage; Vercel Cron runs anything that must call the Storage API.

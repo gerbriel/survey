@@ -18,6 +18,7 @@ export {
 export { hashString, mulberry32, rngFor, shuffleWithPins } from './random'
 export { isSafeRegex, MAX_REGEX_LENGTH } from './regex'
 export { DefinitionShapeError, checkDefinitionShape, migrateDefinition, safeMigrateDefinition } from './migrate'
+export { coverOgSrc, coverSrc, normalizeCover } from './cover'
 export { choiceIds, normalizeAnswer, otherText, toE164, type Normalized } from './normalize'
 export { conditionDepth, scoredCalcIds } from './definition'
 export {

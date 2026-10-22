@@ -1,11 +1,13 @@
 import type { Metadata } from 'next'
 import { requireMember } from '@/lib/auth'
-import { listMembers, listMembersWithEmail, type MemberWithEmail } from '@/lib/db/workspaces'
+import { listMemberOwnedCounts, listMembers, listMembersWithEmail, type MemberWithEmail } from '@/lib/db/workspaces'
+import { listDirectory } from '@/lib/db/profiles'
 import { listWorkspaceInvites } from '@/lib/db/invites'
 import { formatDate } from '@/lib/admin/lifecycle'
 import { memberCan } from '@/lib/auth/roles'
-import { MembersTable, TransferOwnershipForm, type MemberView } from '@/components/settings/MembersTable'
-import { changeRole, removeMemberAction, transferOwnership } from '../actions'
+import { AddExistingUserForm, MembersTable, TransferOwnershipForm, type MemberView } from '@/components/settings/MembersTable'
+import { directAddRoles } from '@/components/settings/member-rules'
+import { addExistingUser, changeRole, removeMemberAction, transferOwnership } from '../actions'
 
 export const metadata: Metadata = { title: 'Members' }
 
@@ -17,10 +19,14 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
   const { slug } = await params
   const { workspace, role, supabase, user } = await requireMember(slug)
   const isAdmin = memberCan(role, 'admin', workspace)
-  const [members, invites] = await Promise.all([
+  const [members, invites, owned, directory] = await Promise.all([
     isAdmin ? listMembersWithEmail(supabase, { workspaceId: workspace.id }) : listMembers(supabase, { workspaceId: workspace.id }),
     isAdmin ? listWorkspaceInvites(supabase, { workspaceId: workspace.id }) : null,
+    listMemberOwnedCounts(supabase, { workspaceId: workspace.id }),
+    // UX only: add_workspace_member checks owner or admin in SQL.
+    isAdmin ? listDirectory(supabase) : null,
   ])
+  const ownedBy = owned.ok ? owned.data : null
   const labels = new Map((invites?.ok ? invites.data : []).map((i) => [i.id, i.label]))
   const rows: MemberView[] = (members.ok ? members.data : []).map((m) => ({
     userId: m.user_id,
@@ -30,8 +36,13 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
     role: m.role,
     joined: formatDate(m.created_at),
     inviteLabel: m.invite_id ? (labels.get(m.invite_id) ?? null) : null,
+    ...(ownedBy ? { ownedSurveys: ownedBy.get(m.user_id) ?? 0 } : {}),
   }))
   const readOnly = workspace.archived_at !== null
+  const memberIds = new Set(rows.map((r) => r.userId))
+  const addable = (directory?.ok ? directory.data : [])
+    .filter((p) => !memberIds.has(p.id))
+    .map((p) => ({ id: p.id, name: p.display_name }))
 
   return (
     <div className="flex flex-col gap-8">
@@ -54,9 +65,27 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
         />
         <p className="text-sm text-muted">
           There is exactly one owner. Admins manage editors and viewers; only the owner promotes or demotes admins. To
-          add people, create an invite link.
+          add people, create an invite link or add someone who already has an account below.
         </p>
       </section>
+      {isAdmin && !readOnly ? (
+        <section aria-labelledby="add-existing-heading" className="flex flex-col gap-4">
+          <h2 id="add-existing-heading" className="text-lg font-semibold">
+            Add existing user
+          </h2>
+          <p className="text-sm text-muted">
+            Anyone with an active account can be added directly. You can give a role up to your own; owner changes only
+            through a transfer.
+          </p>
+          {directory && !directory.ok ? (
+            <p role="alert" className="text-sm text-danger">
+              {directory.error.message}
+            </p>
+          ) : (
+            <AddExistingUserForm action={addExistingUser.bind(null, workspace.slug)} people={addable} roles={directAddRoles(role)} />
+          )}
+        </section>
+      ) : null}
       {role === 'owner' && !readOnly ? (
         <section aria-labelledby="transfer-heading" className="flex flex-col gap-4 rounded-lg border border-danger p-4">
           <h2 id="transfer-heading" className="text-lg font-semibold">

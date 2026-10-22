@@ -7,6 +7,8 @@ describe('workspace shell nav contract', () => {
     expect(workspaceNav('sales-team').map((l) => l.href)).toEqual([
       '/w/sales-team/dashboard',
       '/w/sales-team/surveys',
+      '/w/sales-team/results',
+      '/w/sales-team/compare',
       '/w/sales-team/contacts',
       '/w/sales-team/privacy-tools',
       '/w/sales-team/settings',
@@ -21,8 +23,8 @@ describe('workspace shell nav contract', () => {
   })
 
   it('filters settings sections by role', () => {
-    expect(settingsLinks('a', 'viewer').map((l) => l.segment)).toEqual(['general', 'members', 'privacy', 'limits'])
-    expect(settingsLinks('a', 'editor').map((l) => l.segment)).toEqual(['general', 'members', 'pixels', 'privacy', 'limits'])
-    expect(settingsLinks('a', 'admin')).toHaveLength(7)
+    expect(settingsLinks('a', 'viewer').map((l) => l.segment)).toEqual(['general', 'images', 'members', 'privacy', 'limits'])
+    expect(settingsLinks('a', 'editor').map((l) => l.segment)).toEqual(['general', 'images', 'members', 'pixels', 'privacy', 'limits'])
+    expect(settingsLinks('a', 'admin')).toHaveLength(8)
   })
 })

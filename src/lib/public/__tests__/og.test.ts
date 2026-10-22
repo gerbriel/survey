@@ -54,6 +54,14 @@ describe('ogCardForRequest', () => {
     expect(await ogCardForRequest(req(), V)).toEqual({ kind: 'rate_limited', retryAfter: 60 })
     expect(resolveSurvey).not.toHaveBeenCalled()
   })
+  it('carries the theme header image: a starter as a data URI', async () => {
+    ogCard.mockResolvedValue({
+      ok: true,
+      data: { surveyId: S, title: 'T', workspaceName: 'W', logoPath: null, cover: { source: { kind: 'starter', id: 'ocean' }, height: 'short', focal_y: 0.5 } },
+    })
+    const r = await ogCardForRequest(req(), V)
+    expect(r.kind === 'card' && r.card.coverUrl).toMatch(/^data:image\/svg\+xml;base64,/)
+  })
   it('never caches a miss: the lookup runs again on the next request', async () => {
     ogCard.mockResolvedValue({ ok: true, data: null })
     await ogCardForRequest(req(), V)

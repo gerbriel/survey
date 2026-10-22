@@ -9,6 +9,7 @@
  */
 
 import { CURRENT_SCHEMA_VERSION, OPERATORS, QUESTION_TYPES, type SurveyDefinition } from './types'
+import { normalizeCover } from './cover'
 
 export class DefinitionShapeError extends Error {
   readonly issues: string[]
@@ -221,6 +222,10 @@ export function checkDefinitionShape(v: unknown): string[] {
     if (colors !== undefined && c.need(isObj(colors), 'theme.colors', 'expected object')) {
       for (const [k, v] of Object.entries(colors as Obj)) c.need(isHexColor(v), `theme.colors.${k}`, 'expected #rgb or #rrggbb')
     }
+    const cover = (d.theme as Obj).cover_image
+    if (cover !== undefined) {
+      c.need(isObj(cover) && isObj(cover.source) && normalizeCover(cover) !== null, 'theme.cover_image', 'expected { source, height, focal_y }')
+    }
   }
   if (c.need(Array.isArray(d.pages), 'pages', 'expected array')) {
     ;(d.pages as unknown[]).forEach((pg, i) => {
@@ -264,10 +269,27 @@ function upgradeOnce(d: Obj, from: number): Obj {
   }
 }
 
+/**
+ * The cover image in its current shape (doc 03 section 8.1). The
+ * pre-library `{ path, height, focal_y }` reads as source upload, in place,
+ * without a schema_version bump, because it is a strict subset.
+ * Decision: a cover that cannot be read (unknown starter id, malformed
+ * source) is dropped rather than failing the whole definition, so a live
+ * page still renders, just without a header.
+ */
+function fillCover(theme: unknown): unknown {
+  if (!isObj(theme) || theme.cover_image === undefined) return theme
+  const cover = normalizeCover(theme.cover_image)
+  const { cover_image: _old, ...rest } = theme
+  void _old
+  return cover ? { ...rest, cover_image: cover } : rest
+}
+
 /** Fill collections an older editor may have omitted. Decision: missing collections default to empty instead of failing. */
 function fillDefaults(d: Obj): Obj {
   return {
     ...d,
+    ...(d.theme !== undefined ? { theme: fillCover(d.theme) } : {}),
     logic: d.logic ?? [],
     identity: d.identity ?? {},
     pixel_exclusions: d.pixel_exclusions ?? [],

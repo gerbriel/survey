@@ -9,7 +9,7 @@ export default async function NewSurveyPage({ params }: { params: Promise<{ slug
   const { slug } = await params
   const { supabase, workspace } = await requireMember(slug, 'editor')
   const t = await listTemplates(supabase, { workspaceId: workspace.id })
-  const templates: TemplateCard[] = (t.ok ? t.data : []).map((x) => ({ id: x.id, name: x.name, description: x.description, system: x.workspace_id === null }))
+  const templates: TemplateCard[] = (t.ok ? t.data : []).map((x) => ({ id: x.id, name: x.name, description: x.description, system: x.workspace_id === null, questionCount: x.question_count }))
   const base = `/w/${encodeURIComponent(workspace.slug)}/surveys`
   return (
     <div className="mx-auto max-w-5xl">

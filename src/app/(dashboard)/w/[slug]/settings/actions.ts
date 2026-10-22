@@ -11,6 +11,7 @@ import {
   requestWorkspaceDeletion,
   transferWorkspaceOwnership,
   unarchiveWorkspace,
+  addWorkspaceMember,
   changeMemberRole,
   removeMember,
   removeLogoObject,
@@ -159,6 +160,17 @@ export async function removeMemberAction(slug: string, _prev: ActionState, form:
   }
   revalidatePath(`${base(slug)}/members`)
   return success('Member removed. Everything they created stays.')
+}
+
+/** R20: owner or admin adds an existing active user. add_workspace_member enforces role and target in SQL. */
+export async function addExistingUser(slug: string, _prev: ActionState, form: FormData): Promise<ActionState> {
+  const { supabase, workspace } = await requireMember(slug, 'admin')
+  const parsed = memberForm.extend({ role: z.enum(['admin', 'editor', 'viewer']) }).safeParse(formFields(form))
+  if (!parsed.success) return fromZodError(parsed.error, 'Pick a person and a role.')
+  const r = await addWorkspaceMember(supabase, { workspaceId: workspace.id, ...parsed.data })
+  if (!r.ok) return fromDbError(r.error)
+  revalidatePath(`${base(slug)}/members`)
+  return success('Member added.')
 }
 
 export async function transferOwnership(slug: string, _prev: ActionState, form: FormData): Promise<ActionState> {

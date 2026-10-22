@@ -84,6 +84,32 @@ export type SafeFont =
   | 'IBM Plex Sans'
   | 'system-ui'
 
+/**
+ * Where a survey header (cover) image comes from (doc 03 section 8.1):
+ * a starter shipped with the app at /headers/{id}.svg, an image from the
+ * workspace library, or a one-off upload. Workspace and upload carry the
+ * object name inside public-assets; the public page never reads the library
+ * table (anon has no table grants), so the path travels with the theme.
+ */
+export type CoverSource =
+  | { kind: 'starter'; id: string }
+  | { kind: 'workspace'; image_id: string; path: string }
+  | { kind: 'upload'; path: string }
+
+export interface CoverImage {
+  source: CoverSource
+  height: 'short' | 'tall'
+  /** 0..1 */
+  focal_y: number
+}
+
+/** The shape before the image library: a bare Storage path. migrateDefinition reads it as source upload. */
+export interface LegacyCoverImage {
+  path: string
+  height: 'short' | 'tall'
+  focal_y: number
+}
+
 export interface Theme {
   colors: {
     primary: string
@@ -95,7 +121,7 @@ export interface Theme {
   }
   font: { heading: SafeFont; body: SafeFont; base_size: 'sm' | 'md' | 'lg' }
   logo: { source: 'workspace' | 'none' | 'custom'; custom_path?: string; position: 'left' | 'center'; size: 'sm' | 'md' | 'lg' }
-  cover_image?: { path: string; height: 'short' | 'tall'; focal_y: number }
+  cover_image?: CoverImage
   background: { kind: 'color' } | { kind: 'image'; path: string; overlay_opacity: number }
   button_text: { next: string; back: string; submit: string; start?: string }
   progress: { style: 'bar' | 'steps' | 'percent' | 'none'; position: 'top' | 'bottom' }

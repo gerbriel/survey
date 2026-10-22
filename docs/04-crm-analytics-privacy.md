@@ -327,6 +327,10 @@ Generated on the fly: completion card, responses over time, then one widget per 
 5. `X-Robots-Tag: noindex`, `Referrer-Policy: no-referrer`, no tracking pixels. Unknown, revoked, and expired tokens return the same 404.
 6. A test asserts the payload contains no keys outside an allow-list.
 
+### 5.5 Results hub and Compare
+
+`/w/{workspace}/results` lists responses across surveys with the 4.3 filters plus status, hidden field or UTM value and a bounded open-text search; its bulk export (editor and above) writes one CSV with a survey column and the union of question_key columns, or one XLSX with a sheet per survey plus Summary and Combined. `/w/{workspace}/compare` (viewer and above) puts two to five surveys side by side, matching questions by question_key, then by normalized label plus type, and refuses to combine questions whose types differ. Differences are against the first survey and are withheld when either side has fewer than 3 answers.
+
 ## 6. Exports
 
 Exports run server side in route handlers using the member's session (RLS applies).

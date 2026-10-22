@@ -10,6 +10,8 @@ export function workspaceNav(slug: string): NavLink[] {
   return [
     { href: `${base}/dashboard`, label: 'Dashboard', segment: 'dashboard' },
     { href: `${base}/surveys`, label: 'Surveys', segment: 'surveys' },
+    { href: `${base}/results`, label: 'Results', segment: 'results' },
+    { href: `${base}/compare`, label: 'Compare', segment: 'compare' },
     { href: `${base}/contacts`, label: 'Contacts', segment: 'contacts' },
     { href: `${base}/privacy-tools`, label: 'Privacy tools', segment: 'privacy-tools' },
     { href: `${base}/settings`, label: 'Settings', segment: 'settings' },

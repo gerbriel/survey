@@ -452,7 +452,7 @@ export interface Theme {
   };
   font: { heading: SafeFont; body: SafeFont; base_size: 'sm' | 'md' | 'lg' };
   logo: { source: 'workspace' | 'none' | 'custom'; custom_path?: string; position: 'left' | 'center'; size: 'sm' | 'md' | 'lg' };
-  cover_image?: { path: string; height: 'short' | 'tall'; focal_y: number };  // 0..1
+  cover_image?: { source: CoverSource; height: 'short' | 'tall'; focal_y: number };  // 0..1, section 8.1
   background: { kind: 'color' } | { kind: 'image'; path: string; overlay_opacity: number };
   button_text: { next: string; back: string; submit: string; start?: string };
   progress: { style: 'bar' | 'steps' | 'percent' | 'none'; position: 'top' | 'bottom' };
@@ -462,6 +462,19 @@ export interface Theme {
 ```
 
 `logo.source: 'workspace'` reads the workspace logo path at render time (the one exception to copy-in, because a rebrand should update live surveys). The theme editor warns when text/background contrast is below WCAG AA (4.5:1). Paths are Storage paths in the workspace bucket; bucket rules are doc 01/02.
+
+### 8.1 Header images and the workspace library
+
+```ts
+type CoverSource =
+  | { kind: 'starter'; id: string }                      // app file /headers/{id}.svg
+  | { kind: 'workspace'; image_id: string; path: string } // workspace_images row, path in public-assets
+  | { kind: 'upload'; path: string };                    // one-off upload, path in public-assets
+```
+
+`migrateDefinition` reads the older `cover_image: { path, height, focal_y }` as `{ kind: 'upload', path }` in place (no schema bump, the old shape is a subset) and drops a cover it cannot read rather than failing the definition. A workspace image carries its `path` in the theme because the public page cannot read `workspace_images` (anon has no table grants); `image_id` links the theme back to the library. The renderer resolves starters to `/headers/{id}.svg` on whichever host renders (both hosts allow exactly that path) and everything else through `publicAssetUrl`, so a cover never loads from anywhere but the app and the public-assets bucket (R16). The generated OG card draws the header as a band across the top.
+
+The library (migration 0021, Settings, Images) holds uploads at `public-assets/{workspace_id}/images/{id}.{ext}`: PNG, JPEG or WebP sniffed server side, at most 2 MB, size read from the bytes. Members read; editors and above upload, relabel and delete. Delete is soft and keeps the object, because frozen published versions may still show it. The eight starter headers ship with the app, are listed read only below the library and in the picker, and their ids never change.
 
 ## 9. Collaboration
 

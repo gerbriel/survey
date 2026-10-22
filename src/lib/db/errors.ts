@@ -10,7 +10,7 @@
  *   switch (result.error.code) { case 'revision_conflict': ... }
  *
  * The code list below is every code raised by supabase/migrations 0001 to
- * 0017. When a migration adds a code, add it here and to the tests.
+ * 0020. When a migration adds a code, add it here and to the tests.
  */
 
 /** Codes raised with `raise exception '<code>[: detail]'` in the migrations. */
@@ -67,6 +67,11 @@ export const SQL_ERROR_CODES = [
   'too_many_events',
   'invalid_rate_limit_arguments',
   'not_due',
+  // assignments and direct membership (0020, R19 and R20)
+  'assignee_not_member',
+  'invalid_role',
+  'already_member',
+  'target_not_active',
 ] as const
 
 export type SqlErrorCode = (typeof SQL_ERROR_CODES)[number]
@@ -158,6 +163,10 @@ const MESSAGES: Record<DbErrorCode, string> = {
   too_many_events: 'Too many events in one batch.',
   invalid_rate_limit_arguments: 'Rate limit arguments are not valid.',
   not_due: 'This workspace cannot be purged yet.',
+  assignee_not_member: 'Only active members of this workspace can be assigned.',
+  invalid_role: 'That role is not available. Pick a role at or below your own, never owner.',
+  already_member: 'That person is already a member of this workspace.',
+  target_not_active: 'That person does not have an active account.',
   invalid_input: 'Some of the information is not valid.',
   guard_violation: 'That change is not allowed.',
   permission_denied: 'You do not have permission to do that.',
@@ -189,6 +198,7 @@ export function categoryOf(code: DbErrorCode): DbErrorCategory {
     case 'invalid_state':
     case 'not_draft':
     case 'import_finished':
+    case 'already_member':
       return 'conflict'
     case 'definition_too_large':
     case 'too_many_questions':

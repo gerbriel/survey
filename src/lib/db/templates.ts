@@ -9,7 +9,15 @@ import { asJsonObject, call, id } from './rpc'
  * written by editors. create_survey copies a template's definition.
  */
 export type TemplateRow = Tables<'survey_templates'>
-export type TemplateSummary = Pick<TemplateRow, 'id' | 'workspace_id' | 'name' | 'description' | 'created_at'>
+export type TemplateSummary = Pick<TemplateRow, 'id' | 'workspace_id' | 'name' | 'description' | 'created_at'> & {
+  /** Number of entries in definition.questions, for the new survey cards. */
+  question_count: number
+}
+
+/** Count of keys in a template's `definition->questions` JSON. Pure. */
+export function countTemplateQuestions(questions: unknown): number {
+  return questions && typeof questions === 'object' && !Array.isArray(questions) ? Object.keys(questions).length : 0
+}
 
 export const listTemplatesInput = z.object({ workspaceId: id })
 
@@ -21,10 +29,11 @@ export function listTemplates(client: UserClient, input: z.input<typeof listTemp
     (v) =>
       client
         .from('survey_templates')
-        .select('id, workspace_id, name, description, created_at')
+        .select('id, workspace_id, name, description, created_at, questions:definition->questions')
         .or(`workspace_id.is.null,workspace_id.eq.${v.workspaceId}`)
         .order('name'),
-    (rows): TemplateSummary[] => rows ?? [],
+    (rows): TemplateSummary[] =>
+      (rows ?? []).map(({ questions, ...t }) => ({ ...t, question_count: countTemplateQuestions(questions) })),
   )
 }
 

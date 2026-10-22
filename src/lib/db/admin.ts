@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { Json, Tables, WorkspaceRole } from '@/types/db-helpers'
 import type { UserClient, UserOrAdminClient, AdminClient } from '@/lib/supabase/types'
-import { affected, asJson, call, id, ilikePattern, workspaceSlug, type StorageDeletion } from './rpc'
+import { affected, asJson, call, id, ilikePattern, workspaceRole, workspaceSlug, type StorageDeletion } from './rpc'
 
 /**
  * Platform admin functions (migrations 0003, 0006, 0015; doc 05 section 6).
@@ -481,6 +481,44 @@ export function adminMembershipsByUser(admin: AdminClient) {
       }
       return out
     },
+  )
+}
+
+// --- direct membership (R20, migration 0020) ----------------------------------
+// Platform admin only, never the owner role (ownership moves only through
+// transfer_workspace_ownership). Each writes platform_audit_log in SQL.
+
+export const adminMemberInput = z.object({ workspaceId: id, userId: id })
+export const adminMemberRoleInput = adminMemberInput.extend({ role: workspaceRole.exclude(['owner']) })
+
+/** Any active user into any (not deleted) workspace. Raises invalid_role, target_not_active, already_member. */
+export function adminAddWorkspaceMember(client: UserClient, input: z.input<typeof adminMemberRoleInput>) {
+  return call(
+    adminMemberRoleInput,
+    input,
+    (v) =>
+      client.rpc('admin_add_workspace_member', { p_workspace_id: v.workspaceId, p_user_id: v.userId, p_role: v.role }),
+    () => undefined,
+  )
+}
+
+/** Anyone but the owner. Their owned surveys move to the workspace owner. */
+export function adminRemoveWorkspaceMember(client: UserClient, input: z.input<typeof adminMemberInput>) {
+  return call(
+    adminMemberInput,
+    input,
+    (v) => client.rpc('admin_remove_workspace_member', { p_workspace_id: v.workspaceId, p_user_id: v.userId }),
+    () => undefined,
+  )
+}
+
+/** A non-owner's role to admin, editor or viewer. The same role is a no-op. */
+export function adminSetMemberRole(client: UserClient, input: z.input<typeof adminMemberRoleInput>) {
+  return call(
+    adminMemberRoleInput,
+    input,
+    (v) => client.rpc('admin_set_member_role', { p_workspace_id: v.workspaceId, p_user_id: v.userId, p_role: v.role }),
+    () => undefined,
   )
 }
 

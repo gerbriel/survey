@@ -45,6 +45,7 @@ export default async function EditPage({ params }: { params: Promise<{ slug: str
       canEdit={canEdit}
       workspaceTheme={workspaceTheme}
       logoUrl={publicAssetUrl(process.env.NEXT_PUBLIC_SUPABASE_URL, ws.logo_path) ?? undefined}
+      imageUploadUrl={canEdit ? `/w/${encodeURIComponent(ws.slug)}/settings/images/upload` : null}
       contactFields={fields.ok ? fields.data.map((f) => ({ key: f.key, label: f.label })) : []}
       pixelConsentMode={ws.pixel_consent_mode}
       loadsPixels={pixels.ok && pixels.data.some((p) => p.enabled && !excluded.has(p.id))}

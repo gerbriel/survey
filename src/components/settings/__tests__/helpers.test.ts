@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { diffLines, pageCount, pageHref, readFilters, readPage } from '../activity-view'
 import { limitRows } from '../limits-view'
-import { assignableRoles, canRemove, invitableRoles } from '../member-rules'
+import { assignableRoles, canRemove, directAddRoles, invitableRoles } from '../member-rules'
 
 describe('member rules (mirror guard_workspace_member)', () => {
+  it('direct add (R20): at or below the actor, never owner', () => {
+    expect(directAddRoles('owner')).toEqual(['admin', 'editor', 'viewer'])
+    expect(directAddRoles('admin')).toEqual(['admin', 'editor', 'viewer'])
+    expect(directAddRoles('editor')).toEqual([])
+    expect(directAddRoles('viewer')).toEqual([])
+  })
+
   it('owner manages everyone but the owner row; admin manages editors and viewers', () => {
     expect(assignableRoles('owner', 'admin')).toEqual(['admin', 'editor', 'viewer'])
     expect(assignableRoles('owner', 'owner')).toEqual([])

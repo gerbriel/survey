@@ -45,6 +45,17 @@ describe('host routing', () => {
     expect(isDashboardPathAllowed('/dev/renderer', { dev: true })).toBe(true)
   })
 
+  it('serves the starter header files on both hosts, and nothing else under /headers', () => {
+    for (const ok of ['/headers/ocean.svg', '/headers/facets.svg']) {
+      expect(isPublicPathAllowed(ok)).toBe(true)
+      expect(isDashboardPathAllowed(ok, { dev: false })).toBe(true)
+    }
+    for (const bad of ['/headers/', '/headers/x.png', '/headers/../x.svg', '/headers/a/b.svg']) {
+      expect(isPublicPathAllowed(bad)).toBe(false)
+      expect(isDashboardPathAllowed(bad, { dev: false })).toBe(false)
+    }
+  })
+
   it('redirects /s/{key} to the public host keeping the query string', () => {
     expect(publicRedirectTarget('/s/abc123xyz0', '?t=x', 's.example.org', 'https')).toBe(
       'https://s.example.org/abc123xyz0?t=x',

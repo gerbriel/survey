@@ -49,6 +49,8 @@ export interface BuilderProps {
   canEdit: boolean
   workspaceTheme: Theme
   logoUrl?: string
+  /** Workspace image library upload route (settings/images/upload), when the member may add images. */
+  imageUploadUrl?: string | null
   contactFields: { key: string; label: string }[]
   pixelConsentMode: 'banner' | 'notice' | 'in_form'
   loadsPixels: boolean
@@ -398,6 +400,7 @@ export function Builder(props: BuilderProps) {
         hasWorkspaceLogo={!!props.logoUrl}
         workspaceId={workspaceId}
         surveyId={surveyId}
+        imageUploadUrl={props.imageUploadUrl ?? null}
       />
     )
   }

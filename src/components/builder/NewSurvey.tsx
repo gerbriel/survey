@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
+import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { useToast } from '@/components/ui/Toast'
@@ -17,7 +18,11 @@ export interface TemplateCard {
   name: string
   description: string | null
   system: boolean
+  questionCount: number
 }
+
+/** Decision: the title field starts filled so one click creates a survey; the builder lets you rename it. */
+export const DEFAULT_TITLE = 'Untitled survey'
 
 function blankDefinition(title: string, theme: SurveyDefinition['theme']): SurveyDefinition {
   return {
@@ -34,12 +39,17 @@ function blankDefinition(title: string, theme: SurveyDefinition['theme']): Surve
   }
 }
 
-/** Create from blank, a system or workspace template, or pasted text (doc 03 section 6). */
+/**
+ * Create from blank or a template (the primary choices, equal cards), or from
+ * pasted text under "Other ways to start" (doc 03 section 6). Create buttons
+ * are disabled only while a create is in flight.
+ */
 export function NewSurvey({ workspaceId, base, templates, workspaceTheme }: { workspaceId: string; base: string; templates: TemplateCard[]; workspaceTheme: SurveyDefinition['theme'] | null }) {
   const router = useRouter()
   const { toast } = useToast()
-  const [title, setTitle] = useState('')
+  const [title, setTitle] = useState(DEFAULT_TITLE)
   const [busy, setBusy] = useState<string | null>(null)
+  const name = title.trim() || DEFAULT_TITLE
 
   async function go(key: string, fn: () => Promise<{ ok: true; data: string } | { ok: false; message: string }>) {
     setBusy(key)
@@ -51,56 +61,69 @@ export function NewSurvey({ workspaceId, base, templates, workspaceTheme }: { wo
     router.push(`${base}/${r.data}/edit`)
   }
 
-  const system = templates.filter((t) => t.system)
-  const mine = templates.filter((t) => !t.system)
+  // Workspace templates first, then the starter set, each by name (the query already sorts by name).
+  const ordered = [...templates.filter((t) => !t.system), ...templates.filter((t) => t.system)]
+  const cards: Array<{ key: string; title: string; description: string; meta: string; badge: string | null; create: () => void }> = [
+    {
+      key: 'blank',
+      title: 'Blank survey',
+      description: 'One empty page. Add questions, logic and endings in the builder.',
+      meta: 'No questions yet',
+      badge: null,
+      create: () => void go('blank', () => createSurveyAction(workspaceId, name)),
+    },
+    ...ordered.map((t) => ({
+      key: t.id,
+      title: t.name,
+      description: t.description ?? 'A ready made survey you can change in the builder.',
+      meta: `${t.questionCount} question${t.questionCount === 1 ? '' : 's'}`,
+      badge: t.system ? 'Starter' : 'Workspace',
+      create: () => void go(t.id, () => createSurveyAction(workspaceId, name, t.id)),
+    })),
+  ]
 
   return (
     <div className="flex flex-col gap-8">
-      <section aria-labelledby="blank-h" className="flex flex-col gap-3">
-        <h2 id="blank-h" className="text-lg font-semibold">
-          Start from scratch
+      <div className="max-w-md">
+        <Input label="Survey name" hint="Shown in the dashboard and as the starting title. You can change it later." maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+      </div>
+      <section aria-labelledby="start-h" className="flex flex-col gap-3">
+        <h2 id="start-h" className="text-lg font-semibold">
+          Start from blank or a template
         </h2>
-        <div className="max-w-md">
-          <Input label="Survey name" hint="Used in the dashboard and as the starting title." maxLength={200} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" data-testid="start-cards">
+          {cards.map((c) => (
+            <li key={c.key} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
+              <div className="flex items-start justify-between gap-2">
+                <h3 className="font-medium">{c.title}</h3>
+                {c.badge ? <Badge>{c.badge}</Badge> : null}
+              </div>
+              <p className="text-sm text-muted">{c.description}</p>
+              <p className="text-xs text-muted">{c.meta}</p>
+              <Button size="sm" className="mt-auto self-start" loading={busy === c.key} disabled={busy !== null} onClick={c.create} aria-label={`Create from ${c.title}`}>
+                {busy === c.key ? 'Creating' : 'Create'}
+              </Button>
+            </li>
+          ))}
+        </ul>
+        {templates.length === 0 ? <p className="text-sm text-muted">No templates yet. Save any survey as a template from the builder to see it here.</p> : null}
+      </section>
+      <details className="rounded-lg border border-border p-4">
+        <summary className="cursor-pointer text-base font-semibold">Other ways to start</summary>
+        <div className="mt-3 flex flex-col gap-3">
+          <p className="text-sm text-muted">Paste a list of questions, one per line, and we turn it into a survey you can edit.</p>
+          <ImportTextPanel
+            insertLabel="Create survey"
+            busy={busy === 'import'}
+            onInsert={(pages: ImportedQuestion[][]) => {
+              // Keeps the old default: an untouched name becomes "Imported survey".
+              const importName = name === DEFAULT_TITLE ? 'Imported survey' : name
+              const def = applyImport(blankDefinition(importName, workspaceTheme ?? DEFAULT_THEME), pages).definition
+              void go('import', () => createFromDefinitionAction(workspaceId, importName, def as unknown as { pages: unknown[] }))
+            }}
+          />
         </div>
-        <Button className="self-start" loading={busy === 'blank'} disabled={!!busy} onClick={() => go('blank', () => createSurveyAction(workspaceId, title))}>
-          Create blank survey
-        </Button>
-      </section>
-      {[
-        { label: 'Workspace templates', list: mine, empty: 'Save any survey as a template from the builder to see it here.' },
-        { label: 'Starter templates', list: system, empty: 'No starter templates are installed.' },
-      ].map((g) => (
-        <section key={g.label} aria-label={g.label} className="flex flex-col gap-3">
-          <h2 className="text-lg font-semibold">{g.label}</h2>
-          {g.list.length === 0 ? <p className="text-sm text-muted">{g.empty}</p> : null}
-          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {g.list.map((t) => (
-              <li key={t.id} className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-4">
-                <h3 className="font-medium">{t.name}</h3>
-                {t.description ? <p className="text-sm text-muted">{t.description}</p> : null}
-                <Button size="sm" variant="secondary" className="mt-auto self-start" loading={busy === t.id} disabled={!!busy} onClick={() => go(t.id, () => createSurveyAction(workspaceId, title, t.id))}>
-                  Use template
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      <section aria-labelledby="import-h" className="flex flex-col gap-3">
-        <h2 id="import-h" className="text-lg font-semibold">
-          Start from pasted text
-        </h2>
-        <ImportTextPanel
-          insertLabel="Create survey"
-          busy={busy === 'import'}
-          onInsert={(pages: ImportedQuestion[][]) => {
-            const name = title.trim() || 'Imported survey'
-            const def = applyImport(blankDefinition(name, workspaceTheme ?? DEFAULT_THEME), pages).definition
-            void go('import', () => createFromDefinitionAction(workspaceId, name, def as unknown as { pages: unknown[] }))
-          }}
-        />
-      </section>
+      </details>
     </div>
   )
 }

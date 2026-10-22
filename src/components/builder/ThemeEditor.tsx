@@ -1,6 +1,6 @@
 'use client'
 
-import type { Theme } from '@/lib/survey'
+import { normalizeCover, type Theme } from '@/lib/survey'
 import { contrastRatio } from '@/components/survey/renderer'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -8,6 +8,7 @@ import { Select } from '@/components/ui/Select'
 import { SAFE_FONTS } from '@/lib/builder/defaults'
 import { NumberField, Section } from './fields'
 import { ImageUpload } from './ImageUpload'
+import { ImagePicker } from '@/components/dashboard/ImagePicker'
 
 const COLOR_LABELS: Record<keyof Theme['colors'], string> = {
   primary: 'Primary (buttons, selection)',
@@ -42,6 +43,7 @@ export function ThemeEditor({
   hasWorkspaceLogo,
   workspaceId,
   surveyId,
+  imageUploadUrl,
   disabled,
 }: {
   theme: Theme
@@ -50,8 +52,12 @@ export function ThemeEditor({
   hasWorkspaceLogo: boolean
   workspaceId: string
   surveyId: string
+  /** Workspace image library upload route, for the picker's Upload now tab. */
+  imageUploadUrl?: string | null
   disabled?: boolean
 }) {
+  // Either cover shape reads as the current one (doc 03 section 8.1).
+  const cover = normalizeCover(t.cover_image) ?? undefined
   const warnings = contrastWarnings(t)
   const fonts = SAFE_FONTS.map((f) => ({ value: f, label: f === 'system-ui' ? 'System default' : f }))
   return (
@@ -130,49 +136,43 @@ export function ThemeEditor({
           onChange={(e) => onChange({ ...t, logo: { ...t.logo, size: e.target.value as 'sm' | 'md' | 'lg' } })}
         />
       </Section>
-      <Section title="Cover image">
-        <ImageUpload
-          label={t.cover_image ? 'Replace the cover image' : 'Upload a cover image'}
+      <Section title="Header image">
+        <ImagePicker
+          value={cover}
           workspaceId={workspaceId}
-          surveyId={surveyId}
-          name="cover"
+          uploadUrl={imageUploadUrl ?? null}
           disabled={disabled}
-          onUploaded={(path) => onChange({ ...t, cover_image: { path, height: t.cover_image?.height ?? 'short', focal_y: t.cover_image?.focal_y ?? 0.5 } })}
+          onChange={(source) => {
+            if (!source) {
+              const { cover_image: _c, ...rest } = t
+              void _c
+              onChange(rest as Theme)
+              return
+            }
+            onChange({ ...t, cover_image: { source, height: cover?.height ?? 'short', focal_y: cover?.focal_y ?? 0.5 } })
+          }}
         />
-        {t.cover_image ? (
+        {cover ? (
           <>
             <Select
-              label="Cover height"
+              label="Header height"
               options={[
                 { value: 'short', label: 'Short' },
                 { value: 'tall', label: 'Tall' },
               ]}
-              value={t.cover_image.height}
+              value={cover.height}
               disabled={disabled}
-              onChange={(e) => t.cover_image && onChange({ ...t, cover_image: { ...t.cover_image, height: e.target.value as 'short' | 'tall' } })}
+              onChange={(e) => onChange({ ...t, cover_image: { ...cover, height: e.target.value as 'short' | 'tall' } })}
             />
             <NumberField
               label="Focus point from top (0 to 1)"
               min={0}
               max={1}
               step={0.1}
-              value={t.cover_image.focal_y}
+              value={cover.focal_y}
               disabled={disabled}
-              onChange={(v) => t.cover_image && onChange({ ...t, cover_image: { ...t.cover_image, focal_y: Math.min(1, Math.max(0, v ?? 0.5)) } })}
+              onChange={(v) => onChange({ ...t, cover_image: { ...cover, focal_y: Math.min(1, Math.max(0, v ?? 0.5)) } }, 'theme:cover:focal')}
             />
-            <Button
-              size="sm"
-              variant="ghost"
-              className="self-start"
-              disabled={disabled}
-              onClick={() => {
-                const { cover_image: _c, ...rest } = t
-                void _c
-                onChange(rest as Theme)
-              }}
-            >
-              Remove cover image
-            </Button>
           </>
         ) : null}
       </Section>
