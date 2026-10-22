@@ -21,6 +21,7 @@ import {
   getSurvey,
   getVersion,
   setSurveyArchived,
+  deleteSurvey,
   updateSurveySettings,
   type SurveySettingsPatch,
 } from '@/lib/db/surveys'
@@ -124,9 +125,10 @@ async function bulk(
   slug: string,
   surveyIds: string[],
   fn: (client: UserClient, workspaceId: string, id: string) => Promise<{ ok: boolean; message?: string; newId?: string }>,
+  gate: { role: 'editor' | 'admin'; message: string } = { role: 'editor', message: 'Editors and above can change surveys in bulk.' },
 ): Promise<ActionResult<BulkResult>> {
   const member = await requireMember(slug, 'viewer')
-  if (!memberCan(member.role, 'editor', member.workspace)) return failed({ code: 'permission_denied', message: 'Editors and above can change surveys in bulk.' })
+  if (!memberCan(member.role, gate.role, member.workspace)) return failed({ code: 'permission_denied', message: gate.message })
   const ids = cleanBulkIds(surveyIds)
   if (ids.length === 0) return failed({ code: 'invalid_input', message: 'Select at least one survey.' })
   return { ok: true, data: await runBulk(ids, (id) => fn(member.supabase, member.workspace.id, id)) }
@@ -148,6 +150,31 @@ export async function bulkArchiveSurveysAction(slug: string, surveyIds: string[]
     const r = await setSurveyArchived(client, { surveyId: id, archived })
     return r.ok ? { ok: true } : { ok: false, message: r.error.message }
   })
+}
+
+const DELETE_DENIED = 'Only workspace admins and owners can delete surveys.'
+
+/**
+ * Permanent delete from the archived view (doc 00, Tenancy: admin and owner
+ * only). The role check here is UX; delete_survey refuses anyone below admin
+ * with not_authorized. Only archived surveys of this workspace are deleted, so
+ * a live survey always takes two deliberate steps to remove.
+ */
+export async function bulkDeleteSurveysAction(slug: string, surveyIds: string[]): Promise<ActionResult<BulkResult>> {
+  return bulk(
+    slug,
+    surveyIds,
+    async (client, workspaceId, id) => {
+      const found = await getSurvey(client, { surveyId: id, workspaceId })
+      if (!found.ok) return { ok: false, message: found.error.message }
+      if (!found.data) return { ok: false, message: NOT_FOUND.message }
+      if (found.data.archived_at === null) return { ok: false, message: 'Archive it first.' }
+      const r = await deleteSurvey(client, { surveyId: id })
+      if (r.ok) return { ok: true }
+      return { ok: false, message: r.error.code === 'not_authorized' || r.error.code === 'permission_denied' ? DELETE_DENIED : r.error.message }
+    },
+    { role: 'admin', message: DELETE_DENIED },
+  )
 }
 
 export async function saveDraftAction(versionId: string, expectedRevision: number, definition: Def): Promise<ActionResult<number>> {

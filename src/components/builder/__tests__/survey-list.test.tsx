@@ -2,7 +2,7 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ToastProvider } from '@/components/ui/Toast'
 
 const router = { replace: vi.fn(), refresh: vi.fn(), push: vi.fn() }
@@ -12,6 +12,7 @@ const actions = vi.hoisted(() => ({
   duplicateSurveyAction: vi.fn(),
   bulkArchiveSurveysAction: vi.fn(),
   bulkDuplicateSurveysAction: vi.fn(),
+  bulkDeleteSurveysAction: vi.fn(),
   createSurveyAction: vi.fn(),
   createFromDefinitionAction: vi.fn(),
 }))
@@ -70,6 +71,15 @@ const bodyTitles = () =>
     .slice(1)
     .map((r) => within(r).getAllByRole('link')[0]?.textContent)
 
+beforeAll(() => {
+  // jsdom has no modal dialog support.
+  HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+    this.setAttribute('open', '')
+  }
+  HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) {
+    this.removeAttribute('open')
+  }
+})
 beforeEach(() => vi.clearAllMocks())
 afterEach(cleanup)
 
@@ -130,6 +140,62 @@ describe('SurveyList', () => {
     expect(within(screen.getByRole('form', { name: 'Bulk actions' })).getByRole('button', { name: 'Restore' })).toBeInTheDocument()
     const menu = screen.getByLabelText('Actions for Alpha').closest('details')!
     for (const name of ['Edit', 'Share', 'Responses', 'Analytics', 'Duplicate', 'Restore']) expect(within(menu).getByText(name)).toBeInTheDocument()
+  })
+
+  const ARCHIVED = { archivedView: true, rows: ROWS.map((r) => ({ ...r, archived: true })), initialQuery: { ...DEFAULT_QUERY, state: 'archived' as const } }
+
+  it('shows Delete only in the archived view and only for canDelete', async () => {
+    const bulkBar = () => screen.getByRole('form', { name: 'Bulk actions' })
+    const menuOf = (t: string) => screen.getByLabelText(`Actions for ${t}`).closest('details')!
+    for (const [over, shows] of [
+      [{ canDelete: true }, false],
+      [{ ...ARCHIVED }, false],
+      [{ ...ARCHIVED, canDelete: true }, true],
+    ] as const) {
+      renderList(over)
+      await userEvent.click(screen.getByLabelText('Select Alpha'))
+      expect(within(bulkBar()).queryByRole('button', { name: 'Delete' }) !== null).toBe(shows)
+      expect(within(menuOf('Alpha')).queryByText('Delete') !== null).toBe(shows)
+      cleanup()
+    }
+  })
+
+  it('requires the DELETE word when responses exist and deletes the selected ids', async () => {
+    actions.bulkDeleteSurveysAction.mockResolvedValue({
+      ok: true,
+      data: { succeeded: 1, failed: 1, items: [{ surveyId: ID(2), ok: true }, { surveyId: ID(1), ok: false, message: 'Archive it first.' }] },
+    })
+    renderList({ ...ARCHIVED, canDelete: true })
+    await userEvent.click(screen.getByLabelText('Select Alpha'))
+    await userEvent.click(screen.getByLabelText('Select Bravo'))
+    await userEvent.click(within(screen.getByRole('form', { name: 'Bulk actions' })).getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByText('Alpha')).toBeInTheDocument()
+    expect(within(dialog).getByText('Bravo')).toBeInTheDocument()
+    expect(within(dialog).getByText(/30 responses/)).toBeInTheDocument()
+    expect(dialog).toHaveTextContent('This cannot be undone. Public links will stop working.')
+    const confirm = within(dialog).getByRole('button', { name: 'Delete 2 surveys' })
+    expect(confirm).toBeDisabled()
+    await userEvent.type(within(dialog).getByLabelText('Type DELETE to confirm'), 'delete')
+    expect(confirm).toBeDisabled()
+    await userEvent.clear(within(dialog).getByLabelText('Type DELETE to confirm'))
+    await userEvent.type(within(dialog).getByLabelText('Type DELETE to confirm'), 'DELETE')
+    expect(confirm).toBeEnabled()
+    await userEvent.click(confirm)
+    expect(actions.bulkDeleteSurveysAction).toHaveBeenCalledWith('acme', [ID(2), ID(1)])
+    expect(router.refresh).toHaveBeenCalled()
+    expect(await screen.findByText('Bravo: Archive it first.')).toBeInTheDocument()
+  })
+
+  it('skips the word for one survey with no responses, from the row menu', async () => {
+    actions.bulkDeleteSurveysAction.mockResolvedValue({ ok: true, data: { succeeded: 1, failed: 0, items: [{ surveyId: ID(4), ok: true }] } })
+    renderList({ ...ARCHIVED, canDelete: true, rows: [row(4, 'Empty', 1, { archived: true, responses: 0 })] })
+    await userEvent.click(within(screen.getByLabelText('Actions for Empty').closest('details')!).getByText('Delete'))
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).queryByLabelText('Type DELETE to confirm')).toBeNull()
+    expect(within(dialog).getByText('No responses will be deleted.')).toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete 1 survey' }))
+    expect(actions.bulkDeleteSurveysAction).toHaveBeenCalledWith('acme', [ID(4)])
   })
 
   it('shows the first-run empty state', () => {

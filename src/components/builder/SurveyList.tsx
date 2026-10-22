@@ -2,15 +2,23 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useState, useSyncExternalStore, type KeyboardEvent } from 'react'
+import { useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Dialog } from '@/components/ui/Dialog'
+import { Input } from '@/components/ui/Input'
 import { EmptyState } from '@/components/ui/EmptyState'
 import { Table, TBody, THead, Td, Th, Tr } from '@/components/ui/Table'
 import { useToast } from '@/components/ui/Toast'
 import { focusRing } from '@/components/ui/cx'
 import { AvatarStack, PersonChip, type Person } from '@/components/dashboard/Avatar'
-import { archiveSurveyAction, bulkArchiveSurveysAction, bulkDuplicateSurveysAction, duplicateSurveyAction } from '@/lib/builder/actions'
+import {
+  archiveSurveyAction,
+  bulkArchiveSurveysAction,
+  bulkDeleteSurveysAction,
+  bulkDuplicateSurveysAction,
+  duplicateSurveyAction,
+} from '@/lib/builder/actions'
 import { bulkSummary } from '@/lib/builder/list'
 import type { EffectiveState } from '@/lib/builder/state'
 import {
@@ -60,10 +68,18 @@ function useHydrated(): boolean {
 
 type Failure = { surveyId: string; title: string; message: string }
 
+/** The word a member types to confirm a delete that touches more than one survey or any responses. */
+export const DELETE_WORD = 'DELETE'
+
+/** Titles listed in the delete dialog before "and N more". */
+const DELETE_LIST_MAX = 10
+
+const surveysN = (n: number) => `${n} survey${n === 1 ? '' : 's'}`
+
 /**
  * Surveys table (doc 03 section 6): sortable columns, combinable filters kept
  * in the query string, multi-select with a sticky bulk bar (export, duplicate,
- * archive or restore) and a per-row actions menu.
+ * archive or restore, and delete in the archived view) and a per-row actions menu.
  */
 export function SurveyList({
   rows,
@@ -71,6 +87,7 @@ export function SurveyList({
   slug,
   exportAction,
   canEdit,
+  canDelete = false,
   archivedView,
   initialQuery,
   owners,
@@ -83,6 +100,11 @@ export function SurveyList({
   /** POST target of the Results hub export route. */
   exportAction: string
   canEdit: boolean
+  /**
+   * Admin and owner (doc 00, Tenancy). UX only: it hides the Delete controls;
+   * delete_survey in SQL is what refuses anyone below admin.
+   */
+  canDelete?: boolean
   archivedView: boolean
   initialQuery: ListQuery
   owners: OwnerOption[]
@@ -96,6 +118,9 @@ export function SurveyList({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [busy, setBusy] = useState<string | null>(null)
   const [failures, setFailures] = useState<Failure[]>([])
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null)
+  const [deleteWord, setDeleteWord] = useState('')
+  const returnFocus = useRef<HTMLElement | null>(null)
 
   const shown = applyListQuery(rows, query, now)
   const picked = visibleSelection(selected, shown)
@@ -141,21 +166,65 @@ export function SurveyList({
     router.refresh()
   }
 
-  async function runBulk(kind: 'duplicate' | 'archive') {
-    const ids = picked
+  async function runBulk(kind: 'duplicate' | 'archive' | 'delete', ids: string[] = picked): Promise<boolean> {
     setBusy(`bulk-${kind}`)
-    const r = kind === 'duplicate' ? await bulkDuplicateSurveysAction(slug, ids) : await bulkArchiveSurveysAction(slug, ids, !archivedView)
+    const r =
+      kind === 'duplicate'
+        ? await bulkDuplicateSurveysAction(slug, ids)
+        : kind === 'delete'
+          ? await bulkDeleteSurveysAction(slug, ids)
+          : await bulkArchiveSurveysAction(slug, ids, !archivedView)
     setBusy(null)
-    if (!r.ok) return toast(r.message, 'error')
-    const verb = kind === 'duplicate' ? 'duplicated' : archivedView ? 'restored' : 'archived'
+    if (!r.ok) {
+      toast(r.message, 'error')
+      return false
+    }
+    const verb = kind === 'duplicate' ? 'duplicated' : kind === 'delete' ? 'deleted' : archivedView ? 'restored' : 'archived'
     const s = bulkSummary(r.data, verb)
     toast(s.text, s.tone)
     const failed = r.data.items.filter((i) => !i.ok)
     setFailures(failed.map((i) => ({ surveyId: i.surveyId, title: titleOf(i.surveyId), message: i.message ?? 'Something went wrong.' })))
-    // Decision: failed surveys stay selected so a retry is one click; the rest are cleared.
-    setSelected(new Set(failed.map((i) => i.surveyId)))
+    if (kind === 'delete') {
+      // A delete can start from one row's menu, so only the deleted surveys leave the selection.
+      const gone = new Set(r.data.items.filter((i) => i.ok).map((i) => i.surveyId))
+      setSelected((cur) => new Set([...cur].filter((id) => !gone.has(id))))
+    } else {
+      // Decision: failed surveys stay selected so a retry is one click; the rest are cleared.
+      setSelected(new Set(failed.map((i) => i.surveyId)))
+    }
     router.refresh()
+    return true
   }
+
+  // Delete controls show only in the archived view; canDelete is UX, SQL decides.
+  const showDelete = hydrated && canDelete && archivedView
+
+  function openDelete(ids: string[]) {
+    if (ids.length === 0) return
+    returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setDeleteWord('')
+    setDeleteIds(ids)
+  }
+
+  function closeDelete() {
+    setDeleteIds(null)
+    setDeleteWord('')
+    // The native dialog restores focus too, but a row menu's item is hidden by then, so focus goes back to its trigger.
+    const el = returnFocus.current
+    returnFocus.current = null
+    if (el?.isConnected) window.setTimeout(() => el.focus(), 0)
+  }
+
+  async function confirmDelete() {
+    if (!deleteIds) return
+    if (await runBulk('delete', deleteIds)) closeDelete()
+  }
+
+  const deleteRows = (deleteIds ?? []).map((id) => rows.find((r) => r.id === id)).filter((r): r is SurveyListRow => r !== undefined)
+  const deleteCount = deleteIds?.length ?? 0
+  const deleteResponses = deleteRows.reduce((sum, r) => sum + r.responses, 0)
+  const needsWord = deleteCount > 1 || deleteResponses > 0
+  const wordOk = !needsWord || deleteWord.trim() === DELETE_WORD
 
   const sortHeader = (key: SortKey, label: string) => {
     const on = query.sort === key
@@ -295,6 +364,7 @@ export function SurveyList({
                     onArchive={() =>
                       runOne(r.id, () => archiveSurveyAction(r.id, !r.archived), r.archived ? 'Survey restored.' : 'Survey archived. Its public link stops working.')
                     }
+                    onDelete={showDelete && r.archived ? () => openDelete([r.id]) : undefined}
                   />
                 </Td>
               </Tr>
@@ -349,6 +419,11 @@ export function SurveyList({
               </Button>
             </>
           ) : null}
+          {showDelete ? (
+            <Button size="sm" variant="danger" disabled={busy !== null} onClick={() => openDelete(picked)}>
+              Delete
+            </Button>
+          ) : null}
           {hydrated ? (
             <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
               Clear selection
@@ -356,6 +431,54 @@ export function SurveyList({
           ) : null}
         </form>
       ) : null}
+
+      {/* Outside the export form so the confirmation input never posts with it. */}
+      <Dialog
+        open={deleteIds !== null}
+        onClose={closeDelete}
+        title={deleteCount === 1 ? 'Delete this survey permanently?' : `Delete ${surveysN(deleteCount)} permanently?`}
+        description="This cannot be undone. Public links will stop working."
+        footer={
+          <>
+            <Button variant="secondary" onClick={closeDelete}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              aria-label={`Delete ${surveysN(deleteCount)}`}
+              loading={busy === 'bulk-delete'}
+              disabled={!wordOk || busy !== null}
+              onClick={confirmDelete}
+            >
+              Delete {surveysN(deleteCount)}
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3 text-sm">
+          <ul className="list-disc pl-5" aria-label="Surveys to delete">
+            {deleteRows.slice(0, DELETE_LIST_MAX).map((r) => (
+              <li key={r.id}>{r.title}</li>
+            ))}
+            {deleteCount > DELETE_LIST_MAX ? <li>and {deleteCount - DELETE_LIST_MAX} more</li> : null}
+          </ul>
+          <p>
+            {deleteResponses === 0
+              ? 'No responses will be deleted.'
+              : `${deleteResponses} response${deleteResponses === 1 ? '' : 's'} and their uploaded files will be deleted with ${deleteCount === 1 ? 'it' : 'them'}.`}
+          </p>
+          {needsWord && deleteIds !== null ? (
+            <Input
+              label={`Type ${DELETE_WORD} to confirm`}
+              value={deleteWord}
+              onChange={(e) => setDeleteWord(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+              autoCapitalize="characters"
+            />
+          ) : null}
+        </div>
+      </Dialog>
     </div>
   )
 }
@@ -368,6 +491,7 @@ function RowMenu({
   busy,
   onDuplicate,
   onArchive,
+  onDelete,
 }: {
   row: SurveyListRow
   base: string
@@ -375,6 +499,8 @@ function RowMenu({
   busy: boolean
   onDuplicate: () => void
   onArchive: () => void
+  /** Present only in the archived view for admins and owners. */
+  onDelete?: (() => void) | undefined
 }) {
   const close = (el: HTMLDetailsElement | null) => {
     if (!el) return
@@ -436,6 +562,19 @@ function RowMenu({
               {row.archived ? 'Restore' : 'Archive'}
             </button>
           </>
+        ) : null}
+        {onDelete ? (
+          <button
+            type="button"
+            disabled={busy}
+            className={`${item} text-danger disabled:opacity-50`}
+            onClick={(e) => {
+              close(e.currentTarget.closest('details'))
+              onDelete()
+            }}
+          >
+            Delete
+          </button>
         ) : null}
       </div>
     </details>

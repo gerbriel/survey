@@ -26,6 +26,8 @@ export default async function SurveysPage({
   const query = readListQuery(await searchParams)
   const { supabase, workspace, role, user } = await requireMember(slug, 'viewer')
   const canEdit = memberCan(role, 'editor', workspace)
+  // UX only: delete_survey in SQL refuses anyone below admin (doc 00, Tenancy).
+  const canDelete = memberCan(role, 'admin', workspace)
   const archivedView = query.state === 'archived'
   const r = await listSurveys(supabase, { workspaceId: workspace.id, archived: archivedView })
   const surveys = r.ok ? r.data : []
@@ -89,6 +91,7 @@ export default async function SurveysPage({
         slug={workspace.slug}
         exportAction={`${wsBase}/results/export`}
         canEdit={canEdit}
+        canDelete={canDelete}
         archivedView={archivedView}
         initialQuery={query}
         owners={owners}
